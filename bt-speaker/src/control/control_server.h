@@ -22,6 +22,7 @@ private:
 
   // 命令处理
   static void hGetStatus(const JsonObject& in, JsonObject& out);
+  static void hGetStorage(const JsonObject& in, JsonObject& out);
   static void hSetVolume(const JsonObject& in, JsonObject& out);
   static void hPlay(const JsonObject& in, JsonObject& out);
   static void hPause(const JsonObject& in, JsonObject& out);

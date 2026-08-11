@@ -15,6 +15,7 @@
 #include "audio/audio_service.h"
 #include "ui/display.h"
 #include "control/control_server.h"
+#include "storage/sd_card.h"
 
 void setup() {
   Serial.begin(115200);
@@ -23,8 +24,9 @@ void setup() {
   events.begin();          // 1. 事件队列
   Settings::init();        // 2. NVS 偏好
   audio.init();            // 3. 蓝牙 A2DP + I²S
-  controlServer.init();    // 4. 控制接口（发 ready 事件）
-  display.init();          // 5. OLED（失败不致命）
+  controlServer.init();    // 4. 控制接口（先发 ready，不被下面阻塞）
+  sd_card::begin();        // 5. TF 卡挂载（非致命；无卡时阻塞 ~1s）
+  display.init();          // 6. OLED（失败不致命）
 }
 
 void loop() {

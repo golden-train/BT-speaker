@@ -3,6 +3,8 @@
 #include "control/transport.h"
 #include "audio/audio_service.h"
 #include "core/settings.h"
+#include "storage/sd_card.h"
+#include "storage/assets.h"
 #include "config.h"
 #include <Arduino.h>
 #include <string.h>
@@ -16,8 +18,9 @@ volatile bool s_rebootRequested = false;
 // 命令表（含预留命令，统一回 not_implemented）。
 // 静态成员定义处于类作用域，可访问私有 handler。
 const ControlServer::CmdDef ControlServer::kCommandTable[] = {
-    {proto::CMD_GET_STATUS, &ControlServer::hGetStatus},
-    {proto::CMD_SET_VOLUME, &ControlServer::hSetVolume},
+    {proto::CMD_GET_STATUS,  &ControlServer::hGetStatus},
+    {proto::CMD_GET_STORAGE, &ControlServer::hGetStorage},
+    {proto::CMD_SET_VOLUME,  &ControlServer::hSetVolume},
     {proto::CMD_PLAY,       &ControlServer::hPlay},
     {proto::CMD_PAUSE,      &ControlServer::hPause},
     {proto::CMD_TOGGLE,     &ControlServer::hToggle},
@@ -52,6 +55,7 @@ void fillStatus(JsonObject& status) {
   status["eq"] = eqPresetName(Settings::getEq());
   status["source"] = Settings::getSource() == 0 ? "bluetooth" : "sd";
   status["battery"] = -1;  // P7 预留：电量未知
+  status["sd"] = sd_card::isMounted();   // 纯标志，不做 FS I/O
   if (audio.getTitle()[0])  status["title"]  = audio.getTitle();
   if (audio.getArtist()[0]) status["artist"] = audio.getArtist();
 }
@@ -159,6 +163,20 @@ void ControlServer::hGetStatus(const JsonObject& in, JsonObject& out) {
   out["ok"] = true;
   JsonObject st = out.createNestedObject("status");
   proto::fillStatus(st);
+}
+
+void ControlServer::hGetStorage(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  assets::Report r = assets::scan();
+  out["ok"] = true;
+  JsonObject st = out.createNestedObject("storage");
+  st["mounted"]    = r.mounted;
+  st["totalKB"]    = (uint32_t)r.totalKB;
+  st["usedKB"]     = (uint32_t)r.usedKB;
+  JsonObject fonts = st.createNestedObject("fonts");
+  fonts["hzk16"]   = (uint32_t)r.font16Size;
+  fonts["hzk12"]   = (uint32_t)r.font12Size;
+  st["animFrames"] = r.animFrames;
 }
 
 void ControlServer::hSetVolume(const JsonObject& in, JsonObject& out) {

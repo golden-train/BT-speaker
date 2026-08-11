@@ -12,8 +12,9 @@
 namespace proto {
 
 // ---- 命令名（host → device 的 "cmd" 值）----
-constexpr const char* CMD_GET_STATUS = "getStatus";
-constexpr const char* CMD_SET_VOLUME = "setVolume";
+constexpr const char* CMD_GET_STATUS  = "getStatus";
+constexpr const char* CMD_GET_STORAGE = "getStorage";
+constexpr const char* CMD_SET_VOLUME  = "setVolume";
 constexpr const char* CMD_PLAY  = "play";
 constexpr const char* CMD_PAUSE = "pause";
 constexpr const char* CMD_TOGGLE= "toggle";
