@@ -1,10 +1,10 @@
 // ============================================================
-// OLED 显示（SSD1306 128x64, I²C）：事件驱动，脏标记全屏重绘。
-// 歌名 / 艺人 / 音源+EQ+播放状态 / 音量条 / BT 状态+电量占位。
-// 初始化失败不致命（enabled_=false），音频照常。
+// TFT 显示（ST7735 1.8" 128×160, SPI）：事件驱动，脏标记重绘。
+// 歌名(放大可滚动) / 艺人 / 音源+EQ+播放状态 / 音量条 / BT 状态+电量占位。
+// 下半屏预留给未来菜单（P3）。
 // ============================================================
 #pragma once
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_ST7735.h>
 #include "core/events.h"
 #include "ui/font.h"
 
@@ -16,11 +16,12 @@ public:
 
 private:
   static void onEvent(const Evt& e);   // 事件总线监听者，更新视图模型 + 置脏
-  void render();                        // 全屏重建 + ssd_.display()
+  void render();                        // 全屏重建（TFT 直绘）
   void renderTitle();                   // 含横向滚动
 
-  Adafruit_SSD1306 ssd_;
-  TextRenderer* font_ = nullptr;
+  Adafruit_ST7735* tft_ = nullptr;
+  TextRenderer* font_ = nullptr;        // scale 1（普通文本）
+  TextRenderer* titleFont_ = nullptr;   // scale 2（歌名）
   bool enabled_ = false;
   bool dirty_ = false;
   bool scrollActive_ = false;

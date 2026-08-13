@@ -5,15 +5,18 @@
 AudioService audio;
 
 void AudioService::init() {
-  // ---- 1. I²S 引脚（左声道 MAX98357A）----
+  // ---- 1. I²S 引脚（双声道：两片 MAX98357A 共用此总线，SD 电阻分声道）----
   i2s_pin_config_t pin_config = {
       .mck_io_num = I2S_PIN_NO_CHANGE,   // MAX98357A 无需 MCLK
       .bck_io_num = PIN_I2S_BCLK,
-      .ws_io_num  = PIN_I2S_LRC_L,
-      .data_out_num = PIN_I2S_DIN_L,
+      .ws_io_num  = PIN_I2S_LRC,
+      .data_out_num = PIN_I2S_DIN,
       .data_in_num  = I2S_PIN_NO_CHANGE,
   };
   a2dp_.set_pin_config(pin_config);
+
+  // 双声道：保持立体声输出（DIN 交错左右声道数据），不做单声道混合
+  a2dp_.set_mono_downmix(false);
 
   // ---- 2. AVRCP 回调 ----
   a2dp_.set_avrc_connection_state_callback(AudioService::onBtConn);

@@ -1,22 +1,30 @@
 #include "ui/display.h"
 #include "core/settings.h"
 #include "config.h"
-#include <Wire.h>
+#include <SPI.h>
 #include <ctype.h>
 
 Display display;
 
-void Display::init() {
-  // I²C 总线：SDA=18, SCL=5（GPIO5 是 strapping 引脚，作 SCL 安全：上电被上拉为高=空闲电平）
-  Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
-  Wire.setClock(400000);
+namespace {
+// TFT 走 VSPI（SD 卡走 HSPI，互不干扰）。SPI 实例需全局存活。
+SPIClass tftSPI(VSPI);
+}  // namespace
 
-  if (!ssd_.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
-    enabled_ = false;   // OLED 缺失/故障不致命，音频继续
-    return;
-  }
+void Display::init() {
+  tftSPI.begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, -1);   // 无 MISO（TFT 只写）
+
+  tft_ = new Adafruit_ST7735(&tftSPI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RES);
+  tft_->initR(INITR_BLACKTAB);   // 1.8" ST7735；若颜色反/花屏改 INITR_GREENTAB
+  tft_->setRotation(0);          // 竖屏 128×160
+
+  // 背光：模块 BLK 低=关，拉高开启
+  pinMode(PIN_TFT_BLK, OUTPUT);
+  digitalWrite(PIN_TFT_BLK, HIGH);
+
   enabled_ = true;
-  font_ = new AsciiTextRenderer();
+  font_ = new AsciiTextRenderer(1);
+  titleFont_ = new AsciiTextRenderer(2);
 
   // 初始数据
   volume_ = Settings::getVolume();
@@ -34,7 +42,7 @@ void Display::update() {
     dirty_ = false;
     return;
   }
-  // 滚动动画：仅在需要时以 ~25fps 重绘（限流，避免每 loop 全屏刷新）
+  // 滚动动画：仅在需要时以 ~25fps 重绘（限流）
   if (scrollActive_ && millis() >= scrollHoldUntil_ &&
       millis() - lastScrollMs_ >= 40) {
     render();
@@ -69,16 +77,15 @@ void Display::onEvent(const Evt& e) {
 }
 
 void Display::render() {
-  if (!enabled_) return;
-  ssd_.clearDisplay();
-  ssd_.setTextColor(SSD1306_WHITE);
-  ssd_.setTextSize(1);
-  ssd_.setTextWrap(false);
+  if (!enabled_ || !tft_) return;
+  tft_->fillScreen(ST77XX_BLACK);        // TFT 直绘，无缓冲 display()
+  tft_->setTextColor(ST77XX_WHITE);
 
-  renderTitle();                                   // y0 歌名
-  font_->draw(ssd_, 0, 9, artist_);                // y9 艺人
+  renderTitle();                                   // y=4 歌名（scale 2）
 
-  char line2[32];                                  // y18 音源 + EQ + 播放状态
+  font_->draw(*tft_, 0, 28, artist_);              // y=28 艺人
+
+  char line2[32];                                  // y=40 音源 + EQ + 播放状态
   {
     const char* eq = eqPresetName(eq_);
     char eqLabel[8];
@@ -88,48 +95,48 @@ void Display::render() {
              source_ == 0 ? "BT" : "SD", eqLabel,
              play_ == PlayState::Playing ? ">" : "||");
   }
-  font_->draw(ssd_, 0, 18, line2);
+  font_->draw(*tft_, 0, 40, line2);
 
-  char volBuf[16];                                 // y27 VOL NN%
+  char volBuf[16];                                 // y=52 VOL NN%
   snprintf(volBuf, sizeof(volBuf), "VOL %d%%", volume_);
-  font_->draw(ssd_, 0, 27, volBuf);
+  font_->draw(*tft_, 0, 52, volBuf);
 
-  int filled = (volume_ * 12) / 100;               // y36 音量条（12 格）
-  for (int i = 0; i < 12; ++i) {
-    int x = i * 7;
-    if (i < filled) ssd_.fillRect(x, 36, 6, 6, SSD1306_WHITE);
-    else            ssd_.drawRect(x, 36, 6, 6, SSD1306_WHITE);
+  int filled = (volume_ * 16) / 100;               // y=64 音量条（16 格）
+  for (int i = 0; i < 16; ++i) {
+    int x = i * 8;
+    if (i < filled) tft_->fillRect(x, 64, 7, 8, ST77XX_WHITE);
+    else            tft_->drawRect(x, 64, 7, 8, ST77XX_WHITE);
   }
 
-  char btBuf[32];                                  // y45 BT 状态 + 电量占位
+  char btBuf[32];                                  // y=80 BT 状态 + 电量占位
   snprintf(btBuf, sizeof(btBuf), "%s  BAT --%%",
            bt_ ? "connected" : "disconnected");
-  font_->draw(ssd_, 0, 45, btBuf);
+  font_->draw(*tft_, 0, 80, btBuf);
 
-  ssd_.display();
+  // y=96+ 下半屏预留（未来菜单 P3）
 }
 
 void Display::renderTitle() {
-  uint16_t w = font_->width(title_);
-  if (w <= 120) {
+  uint16_t w = titleFont_->width(title_);   // scale 2：每字 12px
+  if (w <= 120) {                            // 10 字以内静态显示
     scrollActive_ = false;
     scrollOff_ = 0;
-    font_->draw(ssd_, 0, 0, title_);
+    titleFont_->draw(*tft_, 0, 4, title_);
     return;
   }
   scrollActive_ = true;
   uint32_t now = millis();
-  if (now < scrollHoldUntil_) {                    // 停顿中：停在首帧
-    font_->draw(ssd_, 0, 0, title_);
+  if (now < scrollHoldUntil_) {              // 停顿中：停在首帧
+    titleFont_->draw(*tft_, 0, 4, title_);
     return;
   }
-  if (now - lastScrollMs_ >= 40) {                 // 40ms/px 滚动
+  if (now - lastScrollMs_ >= 40) {           // 40ms/px 滚动
     lastScrollMs_ = now;
     scrollOff_++;
   }
-  font_->draw(ssd_, -scrollOff_, 0, title_);                       // 主画
-  font_->draw(ssd_, -scrollOff_ + w + 16, 0, title_);              // 复画（16px 空隙）
-  if (scrollOff_ >= (int)w + 16) {                 // 滚完一轮停顿 800ms
+  titleFont_->draw(*tft_, -scrollOff_, 4, title_);                  // 主画
+  titleFont_->draw(*tft_, -scrollOff_ + w + 16, 4, title_);         // 复画（16px 空隙）
+  if (scrollOff_ >= (int)w + 16) {           // 滚完一轮停顿 800ms
     scrollHoldUntil_ = now + 800;
     scrollOff_ = 0;
   }

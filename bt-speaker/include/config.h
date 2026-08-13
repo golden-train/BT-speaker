@@ -8,17 +8,24 @@
 #include <stdint.h>
 
 // ---------------- I²S 总线 (MAX98357A) ----------------
-// P1 只用左声道：1×MAX98357A + 1×喇叭
-#define PIN_I2S_BCLK   26   // BCK（左右声道共用）
-#define PIN_I2S_LRC_L  25   // 左声道 LRC
-#define PIN_I2S_DIN_L  22   // 左声道 DIN
-// 右声道（做立体声时启用）
-#define PIN_I2S_LRC_R  21   // 右声道 LRC
-#define PIN_I2S_DIN_R  19   // 右声道 DIN
+// 双声道立体声：两片 MAX98357A 共用同一组 I²S 总线（BCLK/LRC/DIN），
+// 声道由各片 SD 引脚电阻选择（MAX98357A 数据手册 Table 5 SD_Mode Control）：
+//   左声道：SD → VIN 短接（SD 电压 >1.4V）
+//   右声道：SD → VIN 经 ~560kΩ（SD 电压 0.77~1.4V）
+#define PIN_I2S_BCLK   26   // BCK（两片共用）
+#define PIN_I2S_LRC    25   // LRC/WS（两片共用）
+#define PIN_I2S_DIN    22   // DIN（两片共用，立体声交错数据）
+// 旧设计预留的独立右声道引脚：双声道用 SD 电阻方案后不再需要，保留备用
+// #define PIN_I2S_LRC_R  21
+// #define PIN_I2S_DIN_R  19
 
-// ---------------- OLED 128×64 (I²C) —— P2 启用 ----------------
-#define PIN_OLED_SDA   18
-#define PIN_OLED_SCL    5
+// ---------------- TFT 1.8" 128×160 (ST7735, SPI) ----------------
+#define PIN_TFT_SCL   27   // SPI 时钟 (VSPI)
+#define PIN_TFT_SDA   19   // MOSI 数据
+#define PIN_TFT_CS    21   // 片选
+#define PIN_TFT_DC     5   // 数据/命令
+#define PIN_TFT_RES   18   // 复位
+#define PIN_TFT_BLK    2   // 背光（低=关，拉高开启）
 
 // ---------------- EC11 旋转编码器 —— P3 启用 ----------------
 #define PIN_ENC_CLK    34   // ADC1，避开 BT/WiFi 干扰
@@ -42,9 +49,6 @@
 
 // ---------------- 蓝牙 ----------------
 #define BT_DEVICE_NAME  "ESP32-BT-Speaker"
-
-// ---------------- OLED ----------------
-#define OLED_I2C_ADDR   0x3C        // SSD1306 默认地址（0x3C / 0x3D）
 
 // ---------------- EQ 预设（P5 实现效果，P2 先定名称） ----------------
 enum { EQ_FLAT = 0, EQ_ROCK, EQ_POP, EQ_JAZZ, EQ_COUNT };

@@ -15,10 +15,13 @@ public:
   virtual uint8_t lineHeight() const = 0;
 };
 
-// ASCII 实现：GLCD 5x7（字格 6x8，无额外 flash 占用）
+// ASCII 实现：GLCD 5x7（字格 6x8，无额外 flash 占用）；scale 放大（如标题用 2x）
 class AsciiTextRenderer : public TextRenderer {
 public:
+  explicit AsciiTextRenderer(uint8_t scale = 1) : scale_(scale) {}
+
   void draw(Adafruit_GFX& g, int x, int y, const char* s) const override {
+    g.setTextSize(scale_);
     g.setCursor(x, y);
     for (; *s; ++s) {
       uint8_t c = (uint8_t)*s;
@@ -26,7 +29,10 @@ public:
     }
   }
   uint16_t width(const char* s) const override {
-    return (uint16_t)(strlen(s) * 6);
+    return (uint16_t)(strlen(s) * 6 * scale_);
   }
-  uint8_t lineHeight() const override { return 8; }
+  uint8_t lineHeight() const override { return (uint8_t)(8 * scale_); }
+
+private:
+  uint8_t scale_;
 };
