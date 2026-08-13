@@ -15,6 +15,7 @@
 #include "audio/audio_service.h"
 #include "ui/display.h"
 #include "input/knob.h"
+#include "input/buttons.h"
 #include "control/control_server.h"
 #include "storage/sd_card.h"
 
@@ -29,11 +30,13 @@ void setup() {
   sd_card::begin();        // 5. TF 卡挂载（非致命；无卡时阻塞 ~1s）
   display.init();          // 6. TFT 显示（失败不致命）
   knob.init();             // 7. EC11 旋钮（音量 + 菜单）
+  buttons.init();          // 8. 播放/暂停、上一曲、下一曲
 }
 
 void loop() {
   controlServer.poll();    // 读一条 JSON 命令 → 分发（可能产生事件）
   knob.poll();             // 旋钮输入（调音量/菜单 → 产生事件）
+  buttons.poll();          // 按键输入（播放控制）
   events.dispatch();       // 排空事件队列 → 通知显示 + 控制
   display.update();        // 脏标记/滚动动画时重绘
 }
