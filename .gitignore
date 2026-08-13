@@ -7,3 +7,5 @@ temp/
 
 # Android Studio 本地 SDK 路径
 local.properties
+.vscode/
+docs/
