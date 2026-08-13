@@ -72,7 +72,7 @@ void ControlServer::init() {
   // 开机 ready 事件
   DynamicJsonDocument doc(64);
   doc["evt"] = proto::EVT_READY;
-  doc["fw"] = "p2";
+  doc["fw"] = "0.4";
   char buf[64];
   serializeJson(doc, buf, sizeof(buf));
   g_transport.writeLine(buf);
