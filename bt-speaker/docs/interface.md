@@ -16,6 +16,7 @@
   - **事件**（音箱 → 软件）：`{"evt":"..."}`，异步主动推送（蓝牙状态/歌曲/音量变化）。
 - **命令名大小写敏感**（`ping` ≠ `Ping`）。
 - 命令未执行完不响应下一条；建议软件**逐条发送、等响应后再发下一条**。
+- **请求关联 ID（A4）**：请求可带 `"id":<任意值>`（int/string），响应原样回带 —— 用于日志追踪与将来多客户端。
 
 ---
 
@@ -35,6 +36,12 @@
 | 下一曲 | `{"cmd":"next"}` | `{"ok":true,"cmd":"next"}` | |
 | 上一曲 | `{"cmd":"prev"}` | `{"ok":true,"cmd":"prev"}` | |
 | 重启 | `{"cmd":"reboot"}` | `{"ok":true,"cmd":"reboot"}` | 响应后重启 |
+| 静音 | `{"cmd":"mute"}` | `{"ok":true,"cmd":"mute"}` | 软件静音（音量归 0） |
+| 取消静音 | `{"cmd":"unmute"}` | `{"ok":true,"cmd":"unmute"}` | 恢复音量 |
+| 切换静音 | `{"cmd":"toggleMute"}` | `{"ok":true,"cmd":"toggleMute"}` | |
+| 蓝牙断开 | `{"cmd":"btDisconnect"}` | `{"ok":true,"cmd":"btDisconnect"}` | 主动断开手机 |
+| 蓝牙重连 | `{"cmd":"btReconnect"}` | `{"ok":true,"cmd":"btReconnect"}` | 重连上次设备 |
+| 设备信息 | `{"cmd":"getDeviceInfo"}` | `{"ok":true,"cmd":"getDeviceInfo","device":{...}}` | fw/chip/uptime/voltage/serial |
 
 ### 预留（解析但返回 `not_implemented`，后续阶段实现）
 
@@ -45,6 +52,14 @@
 | 查电量 | `{"cmd":"getBattery"}` | P7 电源管理 |
 
 软件可用"发送后收到 `not_implemented`"探测功能是否可用，无需握手。
+
+> **延后项（App 侧先置灰/隐藏）**：
+> - `seek` 与进度/时长（A1）：当前库 v1.7.4 无 AVRCP 位置回调 → App 隐藏进度条。
+> - `setEqParam`（B1 自定义 EQ）：随 P5 软件 EQ。
+> - `listTracks`/`playFile`/`setPlayMode`（B2/B3）：随 P6 SD 播放。
+> - `powerOff`（C2）：随 P7 电源管理。
+> - `ota`（C4）：远期。
+> - 语音控制命令/事件：见 `sperker-APP/voice-control-plan.md`（需 INMP441 麦克风硬件）。
 
 ---
 
@@ -70,6 +85,7 @@
 | 字段 | 类型 | 取值范围 |
 |---|---|---|
 | `volume` | int | 0–100 |
+| `muted` | bool | 是否静音（静音时 volume 仍是记忆值） |
 | `playstate` | string | `stopped` \| `playing` \| `paused` \| `fwd_seek` \| `rev_seek` |
 | `bt` | bool | 蓝牙是否已连接 |
 | `eq` | string | `flat` \| `rock` \| `pop` \| `jazz`（P5 生效） |
@@ -113,6 +129,8 @@
 | 歌曲 | `{"evt":"track","title":"蓝莲花","artist":"许巍"}` | 元数据变化；artist 空则省略 |
 | 音量 | `{"evt":"volume","value":60}` | 本地命令或手机端音量变化 |
 | 播放状态 | `{"evt":"playstate","state":"playing"}` | AVRCP 播放状态通知 |
+| 静音 | `{"evt":"mute","muted":true}` | 静音状态变化 |
+| 错误 | `{"evt":"error","code":"sd_mount_failed"}` | 异步错误（如 SD 挂载失败） |
 
 > 说明：`battery` 事件已在协议中定义但**当前不发出**（P7 实现）。
 

@@ -12,13 +12,18 @@
 class AudioService {
 public:
   void init();                    // I2S 引脚 + A2DP + AVRCP 回调 + 应用记忆音量
-  void setVolume(uint8_t pct);    // 0..100（本地设置会自行发布事件）
+  void setVolume(uint8_t pct);    // 0..100（本地设置会自行发布事件，并取消静音）
   uint8_t getVolume() const { return volumePct_; }
+  void setMuted(bool muted);      // 静音/恢复（应用 0 或恢复音量，发布 MuteChanged）
+  void toggleMute();
+  bool isMuted() const { return muted_; }
   void play();
   void pause();
   void toggle();
   void next();
   void prev();
+  void btDisconnect();            // 主动断开蓝牙
+  void btReconnect();             // 重连上次设备
   PlayState getPlayState() const { return playState_; }
   bool isBtConnected() const { return btConnected_; }
   const char* getTitle() const { return title_; }
@@ -27,10 +32,13 @@ public:
 private:
   BluetoothA2DPSink a2dp_;
   uint8_t volumePct_ = 0;
+  bool muted_ = false;
   PlayState playState_ = PlayState::Stopped;
   bool btConnected_ = false;
   char title_[64] = {0};
   char artist_[64] = {0};
+
+  void applyVolume();   // 把 volumePct_/muted_ 落到 a2dp 音量
 
   // A2DP/AVRCP 回调（静态成员，运行于 BT task）
   static void onBtConn(bool connected);

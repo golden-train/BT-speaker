@@ -8,6 +8,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <string.h>
+#include <esp_efuse.h>   // getDeviceInfo 的 MAC/serial
 
 ControlServer controlServer;
 
@@ -28,6 +29,12 @@ const ControlServer::CmdDef ControlServer::kCommandTable[] = {
     {proto::CMD_PREV,       &ControlServer::hPrev},
     {proto::CMD_PING,       &ControlServer::hPing},
     {proto::CMD_REBOOT,     &ControlServer::hReboot},
+    {proto::CMD_MUTE,        &ControlServer::hMute},
+    {proto::CMD_UNMUTE,      &ControlServer::hUnmute},
+    {proto::CMD_TOGGLE_MUTE, &ControlServer::hToggleMute},
+    {proto::CMD_BT_DISCON,   &ControlServer::hBtDisconnect},
+    {proto::CMD_BT_RECON,    &ControlServer::hBtReconnect},
+    {proto::CMD_GET_DEVICE,  &ControlServer::hGetDeviceInfo},
     {proto::CMD_SET_EQ,     &ControlServer::hNotImplemented},
     {proto::CMD_SET_SRC,    &ControlServer::hNotImplemented},
     {proto::CMD_GET_BATT,   &ControlServer::hNotImplemented},
@@ -50,6 +57,7 @@ const char* playStateName(PlayState s) {
 
 void fillStatus(JsonObject& status) {
   status["volume"] = audio.getVolume();
+  status["muted"] = audio.isMuted();
   status["playstate"] = playStateName(audio.getPlayState());
   status["bt"] = audio.isBtConnected();
   status["eq"] = eqPresetName(Settings::getEq());
@@ -72,7 +80,7 @@ void ControlServer::init() {
   // 开机 ready 事件
   DynamicJsonDocument doc(64);
   doc["evt"] = proto::EVT_READY;
-  doc["fw"] = "0.4";
+  doc["fw"] = FW_VERSION;
   char buf[64];
   serializeJson(doc, buf, sizeof(buf));
   g_transport.writeLine(buf);
@@ -99,6 +107,7 @@ bool ControlServer::dispatchCommand(const char* line) {
     out["ok"] = false;
     out["error"] = "bad_json";
   } else {
+    if (in.containsKey("id")) out["id"] = in["id"];   // A4 请求 ID 透传
     const char* cmd = in["cmd"] | "";
     out["cmd"] = cmd;
     const CmdDef* def = findCommand(cmd);
@@ -147,8 +156,16 @@ void ControlServer::onEvent(const Evt& e) {
       doc["evt"] = proto::EVT_PLAY;
       doc["state"] = proto::playStateName((PlayState)e.a);
       break;
+    case EvtType::MuteChanged:
+      doc["evt"] = proto::EVT_MUTE;
+      doc["muted"] = e.a != 0;
+      break;
+    case EvtType::Error:
+      doc["evt"] = proto::EVT_ERROR;
+      doc["code"] = e.s1 ? e.s1 : "unknown";
+      break;
     default:
-      return;  // Battery 等预留事件 P2 不转发
+      return;  // Battery 等预留事件 P7 启用
   }
   if (serializeJson(doc, buf, sizeof(buf)) > 0) {
     g_transport.writeLine(buf);
@@ -210,6 +227,38 @@ void ControlServer::hPing(const JsonObject& in, JsonObject& out) {
 }
 void ControlServer::hReboot(const JsonObject& in, JsonObject& out) {
   (void)in; out["ok"] = true; s_rebootRequested = true;  // 响应写完后再重启
+}
+
+// ---- App 提案 A/C ----
+void ControlServer::hMute(const JsonObject& in, JsonObject& out) {
+  (void)in; audio.setMuted(true); out["ok"] = true;
+}
+void ControlServer::hUnmute(const JsonObject& in, JsonObject& out) {
+  (void)in; audio.setMuted(false); out["ok"] = true;
+}
+void ControlServer::hToggleMute(const JsonObject& in, JsonObject& out) {
+  (void)in; audio.toggleMute(); out["ok"] = true;
+}
+void ControlServer::hBtDisconnect(const JsonObject& in, JsonObject& out) {
+  (void)in; audio.btDisconnect(); out["ok"] = true;
+}
+void ControlServer::hBtReconnect(const JsonObject& in, JsonObject& out) {
+  (void)in; audio.btReconnect(); out["ok"] = true;
+}
+void ControlServer::hGetDeviceInfo(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  out["ok"] = true;
+  JsonObject d = out.createNestedObject("device");
+  d["fw"] = FW_VERSION;
+  d["chip"] = "ESP32";
+  d["uptimeS"] = (uint32_t)(millis() / 1000);
+  d["voltage"] = -1;                    // P7 后接 ADC
+  uint8_t mac[6];
+  esp_efuse_mac_get_default(mac);
+  char serial[16];
+  snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  d["serial"] = serial;
 }
 void ControlServer::hNotImplemented(const JsonObject& in, JsonObject& out) {
   (void)in;

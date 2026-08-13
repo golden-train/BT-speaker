@@ -31,6 +31,13 @@ private:
   static void hPrev(const JsonObject& in, JsonObject& out);
   static void hPing(const JsonObject& in, JsonObject& out);
   static void hReboot(const JsonObject& in, JsonObject& out);
+  // App 提案 A/C
+  static void hMute(const JsonObject& in, JsonObject& out);
+  static void hUnmute(const JsonObject& in, JsonObject& out);
+  static void hToggleMute(const JsonObject& in, JsonObject& out);
+  static void hBtDisconnect(const JsonObject& in, JsonObject& out);
+  static void hBtReconnect(const JsonObject& in, JsonObject& out);
+  static void hGetDeviceInfo(const JsonObject& in, JsonObject& out);
   // 预留命令统一占位
   static void hNotImplemented(const JsonObject& in, JsonObject& out);
 };

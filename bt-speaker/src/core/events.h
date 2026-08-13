@@ -24,7 +24,9 @@ enum class EvtType : uint8_t {
   TrackMeta,          // s1 = 标题指针, s2 = 艺人指针（发布者所有，下次元数据前有效）
   VolumeChanged,      // a = 0..100
   PlayStateChanged,   // a = (uint8_t)PlayState
-  Battery,            // 预留 P7：a = 电量% , b = 是否充电（P2 不发布）
+  MuteChanged,        // a = 1 静音 / 0 取消
+  Error,              // s1 = 错误码字符串（如 "sd_mount_failed"）
+  Battery,            // 预留 P7：a = 电量% , b = 是否充电（P7 启用）
   Count,
 };
 

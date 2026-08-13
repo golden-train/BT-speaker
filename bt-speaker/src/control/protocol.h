@@ -22,6 +22,13 @@ constexpr const char* CMD_NEXT  = "next";
 constexpr const char* CMD_PREV  = "prev";
 constexpr const char* CMD_PING  = "ping";
 constexpr const char* CMD_REBOOT= "reboot";
+// App 提案 A/C（静音/蓝牙管理/设备信息）
+constexpr const char* CMD_MUTE        = "mute";
+constexpr const char* CMD_UNMUTE      = "unmute";
+constexpr const char* CMD_TOGGLE_MUTE = "toggleMute";
+constexpr const char* CMD_BT_DISCON   = "btDisconnect";
+constexpr const char* CMD_BT_RECON    = "btReconnect";
+constexpr const char* CMD_GET_DEVICE  = "getDeviceInfo";
 // 预留（P5 EQ / P6 音源 / P7 电量）：解析但回 not_implemented
 constexpr const char* CMD_SET_EQ   = "setEq";
 constexpr const char* CMD_SET_SRC  = "setSource";
@@ -33,6 +40,8 @@ constexpr const char* EVT_BT      = "bt";
 constexpr const char* EVT_TRACK   = "track";
 constexpr const char* EVT_VOLUME  = "volume";
 constexpr const char* EVT_PLAY    = "playstate";
+constexpr const char* EVT_MUTE    = "mute";
+constexpr const char* EVT_ERROR   = "error";
 constexpr const char* EVT_BATTERY = "battery";
 
 // ---- 序列化辅助（定义在 control_server.cpp）----

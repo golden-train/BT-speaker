@@ -34,10 +34,36 @@ void AudioService::init() {
 
 void AudioService::setVolume(uint8_t pct) {
   if (pct > 100) pct = 100;
-  a2dp_.set_volume(pct * 127 / 100);
+  bool wasMuted = muted_;
   volumePct_ = pct;
+  muted_ = false;                        // 显式调音量 = 取消静音
+  applyVolume();
   Settings::setVolume(pct);              // 本地改动才持久化
   events.publish(Evt{EvtType::VolumeChanged, pct, 0, nullptr, nullptr});
+  if (wasMuted) events.publish(Evt{EvtType::MuteChanged, 0, 0, nullptr, nullptr});
+}
+
+void AudioService::applyVolume() {
+  a2dp_.set_volume(muted_ ? 0 : volumePct_ * 127 / 100);
+}
+
+void AudioService::setMuted(bool muted) {
+  if (muted_ == muted) return;
+  muted_ = muted;
+  applyVolume();
+  events.publish(Evt{EvtType::MuteChanged, (uint8_t)muted, 0, nullptr, nullptr});
+}
+
+void AudioService::toggleMute() {
+  setMuted(!muted_);
+}
+
+void AudioService::btDisconnect() {
+  a2dp_.disconnect();
+}
+
+void AudioService::btReconnect() {
+  a2dp_.set_connected(true);
 }
 
 void AudioService::play()   { a2dp_.play(); }
@@ -89,5 +115,9 @@ void AudioService::onPlayStatus(esp_avrc_playback_stat_t s) {
 void AudioService::onVol(int vol127) {
   // 手机 AVRCP 驱动（0..127），不持久化
   audio.volumePct_ = (uint8_t)((uint32_t)vol127 * 100 / 127);
+  if (audio.muted_) {                    // 手机调音量 = 取消静音
+    audio.muted_ = false;
+    events.publish(Evt{EvtType::MuteChanged, 0, 0, nullptr, nullptr});
+  }
   events.publish(Evt{EvtType::VolumeChanged, audio.volumePct_, 0, nullptr, nullptr});
 }

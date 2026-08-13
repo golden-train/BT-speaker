@@ -27,7 +27,9 @@ void setup() {
   Settings::init();        // 2. NVS 偏好
   audio.init();            // 3. 蓝牙 A2DP + I²S
   controlServer.init();    // 4. 控制接口（先发 ready，不被下面阻塞）
-  sd_card::begin();        // 5. TF 卡挂载（非致命；无卡时阻塞 ~1s）
+  if (!sd_card::begin()) { // 5. TF 卡挂载（非致命；失败推 error 事件）
+    events.publish(Evt{EvtType::Error, 0, 0, "sd_mount_failed", nullptr});
+  }
   display.init();          // 6. TFT 显示（失败不致命）
   knob.init();             // 7. EC11 旋钮（音量 + 菜单）
   buttons.init();          // 8. 播放/暂停、上一曲、下一曲
