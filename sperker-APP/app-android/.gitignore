@@ -1,0 +1,17 @@
+# Android/Gradle 构建输出与本地配置（只提交代码，不提交产物）
+.gradle/
+.idea/
+.kotlin/
+build/
+bin/
+captures/
+.cxx/
+.externalNativeBuild/
+
+# 本地 SDK 路径与 IDE 文件
+local.properties
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
