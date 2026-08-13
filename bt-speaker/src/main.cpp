@@ -14,6 +14,7 @@
 #include "core/settings.h"
 #include "audio/audio_service.h"
 #include "ui/display.h"
+#include "input/knob.h"
 #include "control/control_server.h"
 #include "storage/sd_card.h"
 
@@ -26,11 +27,13 @@ void setup() {
   audio.init();            // 3. 蓝牙 A2DP + I²S
   controlServer.init();    // 4. 控制接口（先发 ready，不被下面阻塞）
   sd_card::begin();        // 5. TF 卡挂载（非致命；无卡时阻塞 ~1s）
-  display.init();          // 6. OLED（失败不致命）
+  display.init();          // 6. TFT 显示（失败不致命）
+  knob.init();             // 7. EC11 旋钮（音量 + 菜单）
 }
 
 void loop() {
   controlServer.poll();    // 读一条 JSON 命令 → 分发（可能产生事件）
+  knob.poll();             // 旋钮输入（调音量/菜单 → 产生事件）
   events.dispatch();       // 排空事件队列 → 通知显示 + 控制
   display.update();        // 脏标记/滚动动画时重绘
 }

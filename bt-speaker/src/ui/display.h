@@ -14,10 +14,17 @@ public:
   void update();          // 每 loop 调用；脏或滚动动画时重绘
   bool enabled() const { return enabled_; }
 
+  // 菜单控制（由输入模块驱动）
+  void setMenuMode(uint8_t mode);    // 0 主界面 / 1 菜单 / 2 音量编辑
+  void setMenuCursor(uint8_t idx);
+  void refreshPrefs();               // 从 Settings 重读 eq/source（EQ/音源变更后）
+
 private:
   static void onEvent(const Evt& e);   // 事件总线监听者，更新视图模型 + 置脏
   void render();                        // 全屏重建（TFT 直绘）
   void renderTitle();                   // 含横向滚动
+  void renderMenu();                    // 菜单列表
+  void renderVolumeEdit();              // 音量编辑
 
   Adafruit_ST7735* tft_ = nullptr;
   TextRenderer* font_ = nullptr;        // scale 1（普通文本）
@@ -28,6 +35,8 @@ private:
   uint32_t lastScrollMs_ = 0;
   uint32_t scrollHoldUntil_ = 0;
   int16_t scrollOff_ = 0;
+  uint8_t menuMode_ = 0;      // 0 主界面 / 1 菜单 / 2 音量编辑
+  uint8_t menuCursor_ = 0;
 
   // 视图模型（与屏幕一致）
   char title_[64] = {0};

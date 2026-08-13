@@ -81,6 +81,9 @@ void Display::render() {
   tft_->fillScreen(ST77XX_BLACK);        // TFT 直绘，无缓冲 display()
   tft_->setTextColor(ST77XX_WHITE);
 
+  if (menuMode_ == 1) { renderMenu(); return; }        // 菜单
+  if (menuMode_ == 2) { renderVolumeEdit(); return; }  // 音量编辑
+
   renderTitle();                                   // y=4 歌名（scale 2）
 
   font_->draw(*tft_, 0, 28, artist_);              // y=28 艺人
@@ -139,5 +142,60 @@ void Display::renderTitle() {
   if (scrollOff_ >= (int)w + 16) {           // 滚完一轮停顿 800ms
     scrollHoldUntil_ = now + 800;
     scrollOff_ = 0;
+  }
+}
+
+// ------------------------------------------------------------------
+// 菜单控制（由输入模块 knob 驱动）
+// ------------------------------------------------------------------
+void Display::setMenuMode(uint8_t mode) {
+  menuMode_ = mode;
+  dirty_ = true;
+}
+
+void Display::setMenuCursor(uint8_t idx) {
+  menuCursor_ = idx;
+  dirty_ = true;
+}
+
+void Display::refreshPrefs() {
+  eq_ = Settings::getEq();
+  source_ = Settings::getSource();
+  dirty_ = true;
+}
+
+// ------------------------------------------------------------------
+// 菜单渲染（128×160）
+// ------------------------------------------------------------------
+void Display::renderMenu() {
+  static const char* items[5] = {"Volume", "EQ Preset", "Source", "Power Off", "Back"};
+
+  font_->draw(*tft_, 4, 8, "== MENU ==");
+  for (int i = 0; i < 5; ++i) {
+    char line[24];
+    char buf[8];
+    const char* val = "";
+    switch (i) {
+      case 0: snprintf(buf, sizeof(buf), "%d%%", volume_);  val = buf; break;
+      case 1: val = eqPresetName(eq_); break;
+      case 2: val = source_ == 0 ? "BT" : "SD"; break;
+      default: break;
+    }
+    snprintf(line, sizeof(line), "%c %s", i == menuCursor_ ? '>' : ' ', items[i]);
+    font_->draw(*tft_, 4, 22 + i * 10, line);
+    if (val[0]) font_->draw(*tft_, 84, 22 + i * 10, val);
+  }
+}
+
+void Display::renderVolumeEdit() {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "Volume %d%%", volume_);
+  titleFont_->draw(*tft_, 4, 16, buf);
+
+  int filled = (volume_ * 16) / 100;
+  for (int i = 0; i < 16; ++i) {
+    int x = i * 8;
+    if (i < filled) tft_->fillRect(x, 48, 7, 14, ST77XX_WHITE);
+    else            tft_->drawRect(x, 48, 7, 14, ST77XX_WHITE);
   }
 }
