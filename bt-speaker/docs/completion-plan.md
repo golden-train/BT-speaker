@@ -47,7 +47,9 @@
 ## 4. 剩余路线
 
 ```
-P5 软件EQ（5段 biquad + 4预设 + B1 setEqParam + 动态低音）
+P5 音频 DSP（set_stream_reader 接管输出；5段 biquad EQ + 4预设 + 动态低音
+   + 自定义EQ/setEqParam + L/R独立增益/平衡 —— 覆盖 sperker-APP/interface.md 调试中心命令
+   getConfig/setChannelGain/setBalance/setCustomEq）
    ↓
 P6 SD播放（ESP8266Audio 解码 + 音源切换 + B2 listTracks/playFile + B3 setPlayMode）
    ↓
