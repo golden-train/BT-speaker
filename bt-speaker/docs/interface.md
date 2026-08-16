@@ -1,6 +1,6 @@
 # ESP32 蓝牙音箱 — 控制接口文档
 
-> 版本：匹配当前固件（`main` 分支）
+> 版本：匹配当前固件（`main` 分支，fw 0.5，P1–P7 + 中文渲染完成）
 > 用途：供外部控制软件（PC/手机 App）通过串口与音箱通信。
 > 传输：**USB 串口 / UART，115200 baud，8N1，JSON 行协议**。
 
@@ -22,44 +22,73 @@
 
 ## 2. 命令表（请求 → 响应）
 
-### 已实现
+### 2.1 基础控制
 
 | 命令 | 请求 | 响应 | 说明 |
 |---|---|---|---|
 | 心跳 | `{"cmd":"ping"}` | `{"ok":true,"cmd":"ping","pong":true}` | 设备在线检测 |
 | 全量状态 | `{"cmd":"getStatus"}` | `{"ok":true,"cmd":"getStatus","status":{...}}` | 见 §3 |
 | 存储状态 | `{"cmd":"getStorage"}` | `{"ok":true,"cmd":"getStorage","storage":{...}}` | 见 §4 |
-| 设音量 | `{"cmd":"setVolume","value":60}` | `{"ok":true,"cmd":"setVolume"}` | value 0–100 |
-| 播放 | `{"cmd":"play"}` | `{"ok":true,"cmd":"play"}` | AVRCP 透传，状态异步回 |
+| 设音量 | `{"cmd":"setVolume","value":60}` | `{"ok":true,"cmd":"setVolume"}` | value 0–100；显式调音量自动取消静音 |
+| 播放 | `{"cmd":"play"}` | `{"ok":true,"cmd":"play"}` | 按当前音源路由（BT=AVRCP，SD=本地） |
 | 暂停 | `{"cmd":"pause"}` | `{"ok":true,"cmd":"pause"}` | |
-| 播放/暂停 | `{"cmd":"toggle"}` | `{"ok":true,"cmd":"toggle"}` | 按上次状态切换 |
+| 播放/暂停 | `{"cmd":"toggle"}` | `{"ok":true,"cmd":"toggle"}` | |
 | 下一曲 | `{"cmd":"next"}` | `{"ok":true,"cmd":"next"}` | |
 | 上一曲 | `{"cmd":"prev"}` | `{"ok":true,"cmd":"prev"}` | |
 | 重启 | `{"cmd":"reboot"}` | `{"ok":true,"cmd":"reboot"}` | 响应后重启 |
+
+### 2.2 静音 / 蓝牙管理 / 设备信息
+
+| 命令 | 请求 | 响应 | 说明 |
+|---|---|---|---|
 | 静音 | `{"cmd":"mute"}` | `{"ok":true,"cmd":"mute"}` | 软件静音（音量归 0） |
 | 取消静音 | `{"cmd":"unmute"}` | `{"ok":true,"cmd":"unmute"}` | 恢复音量 |
 | 切换静音 | `{"cmd":"toggleMute"}` | `{"ok":true,"cmd":"toggleMute"}` | |
 | 蓝牙断开 | `{"cmd":"btDisconnect"}` | `{"ok":true,"cmd":"btDisconnect"}` | 主动断开手机 |
 | 蓝牙重连 | `{"cmd":"btReconnect"}` | `{"ok":true,"cmd":"btReconnect"}` | 重连上次设备 |
-| 设备信息 | `{"cmd":"getDeviceInfo"}` | `{"ok":true,"cmd":"getDeviceInfo","device":{...}}` | fw/chip/uptime/voltage/serial |
+| 设备信息 | `{"cmd":"getDeviceInfo"}` | `{"ok":true,"cmd":"getDeviceInfo","device":{...}}` | 见 §4.2 |
 
-### 预留（解析但返回 `not_implemented`，后续阶段实现）
+### 2.3 音频 DSP / 调试中心（P5）
 
-| 命令 | 请求 | 说明 |
-|---|---|---|
-| 设 EQ | `{"cmd":"setEq","preset":"rock"}` | P5 软件 EQ |
-| 设音源 | `{"cmd":"setSource","source":"bluetooth"}` | P6 SD 播放 |
-| 查电量 | `{"cmd":"getBattery"}` | P7 电源管理 |
+| 命令 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| 设 EQ 预设 | `{"cmd":"setEq","preset":"rock"}` | `{"ok":true,"cmd":"setEq","preset":"rock"}` | `flat`/`rock`/`pop`/`jazz`；写入 customEq |
+| 读调试配置 | `{"cmd":"getConfig"}` | `{"ok":true,"cmd":"getConfig","config":{...}}` | 见 §4.3 |
+| 声道增益 | `{"cmd":"setChannelGain","channel":"left","gain":90}` | `{"ok":true,"cmd":"setChannelGain"}` | `channel`=`left`/`right`；`gain` 0–100（%），100=基准 |
+| 立体声平衡 | `{"cmd":"setBalance","balance":-30}` | `{"ok":true,"cmd":"setBalance"}` | `balance` -100–100；负=左强，正=右强 |
+| 自定义 EQ | `{"cmd":"setCustomEq","freq":1000,"gain":3}` | `{"ok":true,"cmd":"setCustomEq"}` | `freq`=60/250/1000/4000/12000；`gain` -12–+12 dB |
 
-软件可用"发送后收到 `not_implemented`"探测功能是否可用，无需握手。
+### 2.4 SD 播放（P6）
 
-> **延后项（App 侧先置灰/隐藏）**：
-> - `seek` 与进度/时长（A1）：当前库 v1.7.4 无 AVRCP 位置回调 → App 隐藏进度条。
-> - `setEqParam`（B1 自定义 EQ）：随 P5 软件 EQ。
-> - `listTracks`/`playFile`/`setPlayMode`（B2/B3）：随 P6 SD 播放。
-> - `powerOff`（C2）：随 P7 电源管理。
-> - `ota`（C4）：远期。
-> - 语音控制命令/事件：见 `sperker-APP/voice-control-plan.md`（需 INMP441 麦克风硬件）。
+| 命令 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| 设音源 | `{"cmd":"setSource","source":"bluetooth"}` | `{"ok":true,"cmd":"setSource","source":"bluetooth"}` | `bluetooth`\|`sd` |
+| 列曲目 | `{"cmd":"listTracks"}` | `{"ok":true,"cmd":"listTracks","tracks":["a.mp3",...]}` | 扫描 SD 卡 `/music/` 子目录音频文件 |
+| 播放指定曲 | `{"cmd":"playFile","file":"a.mp3"}` | `{"ok":true,"cmd":"playFile","file":"a.mp3"}` | 播放即自动切到 sd 音源 |
+| 播放模式 | `{"cmd":"setPlayMode","mode":"all"}` | `{"ok":true,"cmd":"setPlayMode","mode":"all"}` | `single`(单曲循环)\|`all`(列表循环)\|`random`(随机) |
+
+> SD 播放时 `play`/`pause`/`next`/`prev` 走本地解码；`source` 为 `sd` 时蓝牙音频被旁路。
+
+### 2.5 电源（P7）
+
+| 命令 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| 查电量 | `{"cmd":"getBattery"}` | `{"ok":true,"cmd":"getBattery","battery":70,"charging":false,"voltageMv":3860}` | 见 §4.4 |
+| 关机 | `{"cmd":"powerOff"}` | `{"ok":true,"cmd":"powerOff"}` | 深度睡眠；**编码器按键(GPIO32)按下唤醒** |
+
+### 2.6 调试（固件开发辅助）
+
+| 命令 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| 音频诊断 | `{"cmd":"getAudioDebug"}` | `{"ok":true,"cmd":"getAudioDebug","debug":{"bt":true,"playstate":"stopped","frames":0}}` | `frames`=A2DP 音频数据到达计数；>0 表示数据在流（排障"没音乐"用） |
+
+### 预留 / 延后（App 先置灰或隐藏）
+
+| 命令 | 说明 |
+|---|---|
+| `seek` / 进度 / 时长（A1） | 当前库 v1.7.4 无 AVRCP 位置回调；App 隐藏进度条。升级 A2DP 库 v1.8.x+IDF5 后可做 |
+| `ota`（C4） | 远期 |
+| 语音控制命令/事件 | 需 INMP441 麦克风硬件 + WiFi 音频流 |
 
 ---
 
@@ -70,6 +99,7 @@
   "ok": true, "cmd": "getStatus",
   "status": {
     "volume": 60,
+    "muted": false,
     "playstate": "playing",
     "bt": true,
     "eq": "flat",
@@ -88,27 +118,21 @@
 | `muted` | bool | 是否静音（静音时 volume 仍是记忆值） |
 | `playstate` | string | `stopped` \| `playing` \| `paused` \| `fwd_seek` \| `rev_seek` |
 | `bt` | bool | 蓝牙是否已连接 |
-| `eq` | string | `flat` \| `rock` \| `pop` \| `jazz`（P5 生效） |
+| `eq` | string | `flat` \| `rock` \| `pop` \| `jazz` |
 | `source` | string | `bluetooth` \| `sd` |
-| `battery` | int | 0–100；**-1 = 未实现**（P7 前恒为 -1） |
+| `battery` | int | 0–100；**-1 = 未接电池/异常**（分压未接时为 -1） |
 | `sd` | bool | TF 卡是否挂载 |
 | `title` / `artist` | string | 当前歌曲元数据；空则省略该字段 |
 
 ---
 
-## 4. `getStorage` 响应结构
+## 4. 附加响应结构
+
+### 4.1 `getStorage`
 
 ```json
-{
-  "ok": true, "cmd": "getStorage",
-  "storage": {
-    "mounted": true,
-    "totalKB": 7544832,
-    "usedKB": 682588,
-    "fonts": { "hzk16": 282752, "hzk12": 212064 },
-    "animFrames": 3
-  }
-}
+{"ok":true,"cmd":"getStorage","storage":{"mounted":true,"totalKB":7544832,"usedKB":682588,
+ "fonts":{"hzk16":282752,"hzk12":212064},"animFrames":3}}
 ```
 
 | 字段 | 类型 | 说明 |
@@ -118,21 +142,64 @@
 | `fonts.hzk16` / `fonts.hzk12` | int | 中文字体文件字节数（0 = 缺失） |
 | `animFrames` | int | `/anim` 目录下动画帧文件数 |
 
+### 4.2 `getDeviceInfo`
+
+```json
+{"ok":true,"cmd":"getDeviceInfo","device":{"fw":"0.5","chip":"ESP32","uptimeS":9,
+ "voltage":3860,"rst":1,"serial":"B4BFE90A3190"}}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `fw` | string | 固件版本 |
+| `chip` | string | 芯片型号 |
+| `uptimeS` | int | 开机秒数 |
+| `voltage` | int | 电池电压 mV；**0 = 未接电池/异常** |
+| `rst` | int | 上次重启原因：1=上电 3=软重启 4=panic 5/6/7=看门狗 8=深度睡眠 9=掉电 |
+| `serial` | string | 芯片 MAC（大写 hex） |
+
+### 4.3 `getConfig`
+
+```json
+{"ok":true,"cmd":"getConfig","config":{
+  "channelGain":{"left":100,"right":100},
+  "balance":0,
+  "customEq":[{"freq":60,"gain":0},{"freq":250,"gain":0},{"freq":1000,"gain":0},
+              {"freq":4000,"gain":0},{"freq":12000,"gain":0}]}}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `channelGain.left/right` | int | 0–100（%）；100=基准 |
+| `balance` | int | -100–100；负=左强，正=右强 |
+| `customEq[]` | array | 5 段；`freq` Hz，`gain` dB（-12–+12） |
+
+### 4.4 `getBattery`
+
+```json
+{"ok":true,"cmd":"getBattery","battery":70,"charging":false,"voltageMv":3860}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `battery` | int | 0-100 电量百分比；**-1 = 未接电池/异常** |
+| `charging` | bool | 是否正在充电（TP4056 CHRG） |
+| `voltageMv` | int | 电池电压 mV；0 = 未知 |
+
 ---
 
 ## 5. 异步事件（音箱 → 软件）
 
 | 事件 | 示例 | 触发 |
 |---|---|---|
-| 就绪 | `{"evt":"ready","fw":"p2"}` | 开机初始化完成（一次）。`fw` 为固件版本标签 |
+| 就绪 | `{"evt":"ready","fw":"0.5"}` | 开机初始化完成（一次）。`fw` 为固件版本标签 |
 | 蓝牙 | `{"evt":"bt","connected":true}` | 蓝牙连接/断开 |
 | 歌曲 | `{"evt":"track","title":"蓝莲花","artist":"许巍"}` | 元数据变化；artist 空则省略 |
 | 音量 | `{"evt":"volume","value":60}` | 本地命令或手机端音量变化 |
-| 播放状态 | `{"evt":"playstate","state":"playing"}` | AVRCP 播放状态通知 |
+| 播放状态 | `{"evt":"playstate","state":"playing"}` | 播放状态通知（BT 的 AVRCP / SD 本地） |
 | 静音 | `{"evt":"mute","muted":true}` | 静音状态变化 |
-| 错误 | `{"evt":"error","code":"sd_mount_failed"}` | 异步错误（如 SD 挂载失败） |
-
-> 说明：`battery` 事件已在协议中定义但**当前不发出**（P7 实现）。
+| 电量 | `{"evt":"battery","battery":70,"charging":false,"voltageMv":3860}` | 电量变化或每 30s 定时推送（未接电池不推） |
+| 错误 | `{"evt":"error","code":"sd_mount_failed"}` | 异步错误（SD 挂载失败 / 低电量） |
 
 ---
 
@@ -142,7 +209,9 @@
 {"ok":false,"error":"bad_json"}                        // 行不是合法 JSON
 {"ok":false,"error":"unknown_command","cmd":"foo"}      // 命令不存在
 {"ok":false,"cmd":"setVolume","error":"invalid_value"}  // 参数非法（如 value 越界）
-{"ok":false,"cmd":"setEq","error":"not_implemented"}    // 预留命令未实现
+{"ok":false,"cmd":"playFile","error":"open_failed"}     // 文件打不开 / 卡未挂载
+{"ok":false,"cmd":"listTracks","error":"sd_not_mounted"}
+{"ok":false,"cmd":"ota","error":"not_implemented"}      // 预留命令未实现
 ```
 
 ---
@@ -155,7 +224,7 @@
 
 → {"cmd":"setVolume","value":70}
 ← {"ok":true,"cmd":"setVolume"}
-← {"evt":"volume","value":70}          // 异步确认，TFT/OLED 联动
+← {"evt":"volume","value":70}
 
 → {"cmd":"getStatus"}
 ← {"ok":true,"cmd":"getStatus","status":{"volume":70,"playstate":"stopped","bt":false,"eq":"flat","source":"bluetooth","battery":-1,"sd":true}}
@@ -164,28 +233,38 @@
 ← {"evt":"bt","connected":true}
 ← {"evt":"track","title":"蓝莲花","artist":"许巍"}
 ← {"evt":"playstate","state":"playing"}
+
+（切到 SD 播放）
+→ {"cmd":"listTracks"}
+← {"ok":true,"cmd":"listTracks","tracks":["a.mp3","b.mp3"]}
+→ {"cmd":"setPlayMode","mode":"all"}
+← {"ok":true,"cmd":"setPlayMode","mode":"all"}
+→ {"cmd":"playFile","file":"a.mp3"}
+← {"ok":true,"cmd":"playFile","file":"a.mp3"}
+→ {"cmd":"getStatus"}
+← {"ok":true,"cmd":"getStatus","status":{"volume":70,"playstate":"playing","bt":true,"eq":"rock","source":"sd","battery":80,"sd":true}}
 ```
 
 ---
 
 ## 8. 机内控制（旋钮 + 按键，与 APP 命令等效）
 
-设备自带物理操控，走**与 APP 命令相同的服务**（`audio_service`/`Settings`），事件照常推送 —— 无论用旋钮还是 APP 调音量，软件端收到的都是 `{"evt":"volume",...}`，行为一致。
+设备自带物理操控，走**与 APP 命令相同的服务**，事件照常推送 —— 无论用旋钮还是 APP 调音量，软件端收到的都是 `{"evt":"volume",...}`，行为一致。
 
 | 硬件 | 操作 | 动作 |
 |---|---|---|
 | EC11 旋钮（34/35/32） | 旋转 | 主界面：调音量（±2/格）；菜单：移光标；音量编辑：实时调 |
 | EC11 按键 | 按下 | 主界面→进菜单；菜单→选中；音量编辑→返回菜单 |
-| 播放/暂停键（33） | 单击 | 播放/暂停 |
+| 播放/暂停键（33） | 单击 | 播放/暂停（按当前音源路由） |
 | 上一曲（4） / 下一曲（16） | 单击 | 上一曲 / 下一曲 |
 
 **菜单结构**（旋钮按键进入）：
 
 ```
 > 音量      NN%
-  EQ 预设   flat/rock/pop/jazz   （循环，效果 P5 生效）
-  输入源    BT                   （P6 才可切换）
-  关机                          （重启）
+  EQ 预设   flat/rock/pop/jazz   （循环，预设生效）
+  输入源    BT / SD              （P6 起可切换）
+  关机                          （深度睡眠，编码器键唤醒）
   返回
 ```
 
@@ -195,12 +274,13 @@
 
 | 模块 | 头文件 | 对外能力 |
 |---|---|---|
-| 音频服务 | `src/audio/audio_service.h` | `AudioService audio`：`init/setVolume/getVolume/play/pause/toggle/next/prev/getPlayState/isBtConnected/getTitle/getArtist` |
-| 事件总线 | `src/core/events.h` | `EventBus events`：`begin/publish/addListener/dispatch`（解耦音频→显示/控制） |
-| 偏好存储 | `src/core/settings.h` | `Settings::init/getVolume/setVolume/getEq/setEq/getSource/setSource`（NVS 持久化） |
-| 显示 | `src/ui/display.h` | `Display display`：`init/update/enabled`（事件驱动重绘） |
-| TF 卡 | `src/storage/sd_card.h` | `sd_card::begin/isMounted/totalKB/usedKB/fileExists/fileSize/countFiles` |
-| 资源清单 | `src/storage/assets.h` | `assets::scan()` → 字体/动画资源状态 |
+| 音频服务 | `src/audio/audio_service.h` | `AudioService audio`：`init/setVolume/.../setEq/setChannelGain/setBalance/setCustomEq/setSource` + DSP 管线(`audio/dsp.h`) |
+| SD 播放 | `src/audio/sd_audio.h` | `sd_audio::scan/trackCount/playFile/playIndex/stop/pauseToggle/next/prev/setPlayMode/poll` |
+| 电源 | `src/power/battery.h` | `battery::init/voltageMv/percentage/isCharging/poll` |
+| 事件总线 | `src/core/events.h` | `EventBus events`：`begin/publish/addListener/dispatch` |
+| 偏好存储 | `src/core/settings.h` | `Settings::...`（音量/EQ/音源/声道增益/平衡/customEq，NVS） |
+| 显示 | `src/ui/display.h` | `Display display`：`init/update/enabled`（帧缓冲 + 中文渲染） |
+| TF 卡 | `src/storage/sd_card.h` | `sd_card::begin/isMounted/...` |
 | 控制服务器 | `src/control/control_server.h` | `ControlServer::init/poll`（命令分发 + 事件转发） |
 | 传输抽象 | `src/control/transport.h` | `Transport`（SerialTransport 现用；WiFi TCP 预留） |
 
@@ -210,4 +290,4 @@
 
 - **新增命令**：在 `control_server.cpp` 的 `kCommandTable` 加一行 `{命令名, 处理函数}`，协议常量加在 `protocol.h`。
 - **预留传输**：WiFi TCP（`SPEAKER_ENABLE_WIFI_TRANSPORT` 宏，当前不编译）——未来手机 App 无线控制的同一协议通道。
-- **资源约定**：TF 卡目录结构见卡上 `/README.txt`（字体格式、动画帧格式）。
+- **资源约定**：TF 卡目录结构见卡上 `/README.txt`（字体格式、动画帧格式）；**歌曲放 `/music/` 子目录**。
