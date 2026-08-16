@@ -38,7 +38,8 @@ uint16_t voltageMv() {
 
 int8_t percentage() {
   uint16_t mv = voltageMv();
-  if (mv == 0) return -1;
+  // 不在电池电压范围（2.5V~5V）= 未接分压/异常 → 返回 -1，避免误判"0%低电"触发休眠
+  if (mv < 2500 || mv > 5000) return -1;
   // 简化线性映射：3.3V→0%，4.2V→100%（锂电池近似）
   if (mv >= 4200) return 100;
   if (mv <= 3300) return 0;
@@ -56,6 +57,7 @@ void poll() {
   int8_t pct = percentage();
   if (pct < 0) return;
 
+#if SPEAKER_LOW_BAT_SLEEP
   // 低电自动休眠：%<阈值 且 未充电，持续 60s 后深度睡眠（编码器键唤醒）
   if (pct < BAT_LOW_PCT && !chg) {
     if (s_lowSinceMs == 0) s_lowSinceMs = now;
@@ -68,6 +70,10 @@ void poll() {
   } else {
     s_lowSinceMs = 0;
   }
+#else
+  (void)now; (void)chg; (void)pct;   // 暂关：不触发低电自动休眠
+  s_lowSinceMs = 0;
+#endif
 
   // 电量事件：变化 或 每 30s 定时推送
   if ((chg != s_lastCharging || pct != s_lastPct || now - s_lastPubMs >= kPubIntervalMs) && pct >= 0) {

@@ -51,13 +51,16 @@
    + 4预设(flat/rock/pop/jazz) + 自定义EQ —— 覆盖调试中心命令
    getConfig/setChannelGain/setBalance/setCustomEq，fw 0.5）
    ↓
-P6 SD播放（ESP8266Audio 解码 + 音源切换 + B2 listTracks/playFile + B3 setPlayMode）
+✅ P6 SD 播放（已实现：ESP8266Audio 解码 + 音源切换 setSource + B2 listTracks/playFile
+   + B3 setPlayMode；歌曲统一存 /music/ 子目录；播放控制按音源路由）
    ↓
-P7 电源管理（电量 ADC + 充电检测 + 低电报警 + B4 电量事件 + C2 powerOff + 自动关机/休眠）
+✅ P7 电源管理（已实现：电量 ADC + TP4056 充电检测 + B4 battery 事件 + getBattery
+   + C2 powerOff 深度睡眠 + 低电(<10%且未充电60s)自动休眠）
    ↓
 P8 装箱（外壳 + 整机）
 ```
-延后：中文渲染（TFT + SD 字体，SD 上 hzk16/hzk12 已就绪）、WiFi 文件访问（`voice-control-plan` 之外，App 远程管卡）、语音控制（INMP441 + WiFi 音频流）。
+延后：WiFi 文件访问（`voice-control-plan` 之外，App 远程管卡）、语音控制（INMP441 + WiFi 音频流）。
+已实现：中文渲染（CjkTextRenderer + HZK16 + UTF-8→GB2312 表；GB2312 外汉字如日文"坂龍"显示占位框）。
 
 ## 5. 已完成的固件功能（当前 main）
 

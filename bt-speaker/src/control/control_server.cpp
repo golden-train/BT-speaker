@@ -13,6 +13,7 @@
 #include <string.h>
 #include <esp_efuse.h>   // getDeviceInfo 的 MAC/serial
 #include <esp_sleep.h>   // powerOff 深度睡眠
+#include <esp_system.h>  // esp_reset_reason
 
 ControlServer controlServer;
 
@@ -279,6 +280,7 @@ void ControlServer::hGetDeviceInfo(const JsonObject& in, JsonObject& out) {
   d["chip"] = "ESP32";
   d["uptimeS"] = (uint32_t)(millis() / 1000);
   d["voltage"] = battery::voltageMv();  // P7：0 = 未接电池/异常
+  d["rst"] = (int)esp_reset_reason();   // 诊断：重启原因（4=panic 5/6/7=看门狗 8=deep_sleep 9=brownout）
   uint8_t mac[6];
   esp_efuse_mac_get_default(mac);
   char serial[16];
