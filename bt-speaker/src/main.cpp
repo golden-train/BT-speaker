@@ -20,7 +20,9 @@
 #include "input/buttons.h"
 #include "control/control_server.h"
 #include "control/transports/serial_transport.h"
+#ifdef SPEAKER_ENABLE_BLE
 #include "control/ble_transport.h"
+#endif
 #include "storage/sd_card.h"
 
 void setup() {
@@ -29,10 +31,11 @@ void setup() {
 
   events.begin();          // 1. 事件队列
   Settings::init();        // 2. NVS 偏好
-  bleTransport.begin();    // 2.5 BLE 双模控制器（须先于 A2DP 启动）
-  audio.init();            // 3. 蓝牙 A2DP + I²S（与 BLE 共存）
-  controlServer.addTransport(serialTransport);  // 4. USB 串口传输
-  controlServer.addTransport(bleTransport);     //    BLE 传输（GATT 已建）
+  controlServer.addTransport(serialTransport);  // 3. USB 串口传输（begin）
+#ifdef SPEAKER_ENABLE_BLE
+  controlServer.addTransport(bleTransport);     //    BLE 传输（可选，编译开关 SPEAKER_ENABLE_BLE）
+#endif
+  audio.init();            // 4. 蓝牙 A2DP + I²S（BLE 开启时须在其后）
   controlServer.init();    //    控制接口（发 ready 广播，不被下面阻塞）
   if (!sd_card::begin()) { // 5. TF 卡挂载（非致命；失败推 error 事件）
     events.publish(Evt{EvtType::Error, 0, 0, "sd_mount_failed", nullptr});
