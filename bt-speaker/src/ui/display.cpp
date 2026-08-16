@@ -1,4 +1,5 @@
 #include "ui/display.h"
+#include "ui/cjk_font.h"
 #include "core/settings.h"
 #include "config.h"
 #include <SPI.h>
@@ -23,8 +24,8 @@ void Display::init() {
   digitalWrite(PIN_TFT_BLK, HIGH);
 
   enabled_ = true;
-  font_ = new AsciiTextRenderer(1);
-  titleFont_ = new AsciiTextRenderer(2);
+  font_ = new CjkTextRenderer(1, 1);       // 普通文本：ASCII 8px + CJK 16px
+  titleFont_ = new CjkTextRenderer(2, 1);  // 歌名：ASCII 放大 + CJK 16px
 
   // 初始数据
   volume_ = Settings::getVolume();
