@@ -58,7 +58,7 @@
 #define BT_DEVICE_NAME  "ESP32-BT-Speaker"
 
 // ---------------- 固件版本（ready 事件 / getDeviceInfo 共用） ----------------
-#define FW_VERSION  "0.5"
+#define FW_VERSION  "0.6"
 
 // ---------------- EQ 预设（P5 实现效果，P2 先定名称） ----------------
 enum { EQ_FLAT = 0, EQ_ROCK, EQ_POP, EQ_JAZZ, EQ_COUNT };

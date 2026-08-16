@@ -13,3 +13,6 @@ private:
   char buf_[192];      // 最长支持行（覆盖 track 事件：标题+艺人+JSON ≈ 160B）
   size_t len_ = 0;
 };
+
+// 全局串口传输对象（main 里注册给 ControlServer；兼容旧 g_transport 引用）
+extern SerialTransport serialTransport;

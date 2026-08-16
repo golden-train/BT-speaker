@@ -2,11 +2,9 @@
 #include <Arduino.h>
 #include <string.h>
 
-namespace {
-SerialTransport s_transport;
-}  // namespace
+SerialTransport serialTransport;
 
-Transport& g_transport = s_transport;
+Transport& g_transport = serialTransport;   // 兼容引用（新代码用 addTransport）
 
 void SerialTransport::begin() {
   len_ = 0;

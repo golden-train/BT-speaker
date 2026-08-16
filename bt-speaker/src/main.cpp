@@ -19,6 +19,8 @@
 #include "input/knob.h"
 #include "input/buttons.h"
 #include "control/control_server.h"
+#include "control/transports/serial_transport.h"
+#include "control/ble_transport.h"
 #include "storage/sd_card.h"
 
 void setup() {
@@ -27,8 +29,11 @@ void setup() {
 
   events.begin();          // 1. 事件队列
   Settings::init();        // 2. NVS 偏好
-  audio.init();            // 3. 蓝牙 A2DP + I²S
-  controlServer.init();    // 4. 控制接口（先发 ready，不被下面阻塞）
+  bleTransport.begin();    // 2.5 BLE 双模控制器（须先于 A2DP 启动）
+  audio.init();            // 3. 蓝牙 A2DP + I²S（与 BLE 共存）
+  controlServer.addTransport(serialTransport);  // 4. USB 串口传输
+  controlServer.addTransport(bleTransport);     //    BLE 传输（GATT 已建）
+  controlServer.init();    //    控制接口（发 ready 广播，不被下面阻塞）
   if (!sd_card::begin()) { // 5. TF 卡挂载（非致命；失败推 error 事件）
     events.publish(Evt{EvtType::Error, 0, 0, "sd_mount_failed", nullptr});
   }

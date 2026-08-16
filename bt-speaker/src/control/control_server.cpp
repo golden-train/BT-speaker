@@ -18,8 +18,18 @@
 ControlServer controlServer;
 
 namespace {
+constexpr int kMaxTransports = 4;
+Transport* s_transports[kMaxTransports] = {};
+int s_transportCount = 0;
 volatile bool s_rebootRequested = false;
 volatile bool s_powerOffRequested = false;
+
+void broadcast(const char* line) {
+  for (int i = 0; i < s_transportCount; ++i) s_transports[i]->writeLine(line);
+}
+void flushAll() {
+  for (int i = 0; i < s_transportCount; ++i) s_transports[i]->flush();
+}
 }  // namespace
 
 // 命令表（含预留命令，统一回 not_implemented）。
@@ -88,37 +98,45 @@ void fillStatus(JsonObject& status) {
 // ------------------------------------------------------------------
 // 控制服务器
 // ------------------------------------------------------------------
+void ControlServer::addTransport(Transport& t) {
+  if (s_transportCount >= kMaxTransports) return;
+  t.begin();
+  s_transports[s_transportCount++] = &t;
+}
+
 void ControlServer::init() {
-  g_transport.begin();
   events.addListener(ControlServer::onEvent);
 
-  // 开机 ready 事件
+  // 开机 ready 事件（广播到所有已注册传输）
   DynamicJsonDocument doc(64);
   doc["evt"] = proto::EVT_READY;
   doc["fw"] = FW_VERSION;
   char buf[64];
   serializeJson(doc, buf, sizeof(buf));
-  g_transport.writeLine(buf);
+  broadcast(buf);
 }
 
 void ControlServer::poll() {
   char line[192];
-  if (!g_transport.readLine(line, sizeof(line))) return;
-  dispatchCommand(line);
+  for (int i = 0; i < s_transportCount; ++i) {
+    if (s_transports[i]->readLine(line, sizeof(line))) {
+      dispatchCommand(s_transports[i], line);
+    }
+  }
   if (s_rebootRequested) {
-    g_transport.flush();
+    flushAll();
     delay(100);
     ESP.restart();
   }
   if (s_powerOffRequested) {
-    g_transport.flush();
+    flushAll();
     delay(100);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_32, LOW);   // 编码器按键唤醒
     esp_deep_sleep_start();
   }
 }
 
-bool ControlServer::dispatchCommand(const char* line) {
+bool ControlServer::dispatchCommand(Transport* t, const char* line) {
   DynamicJsonDocument in(512);
   DynamicJsonDocument outDoc(1024);   // getStatus 含最长标题/艺人（转义后可能很大）
   JsonObject out = outDoc.to<JsonObject>();
@@ -142,7 +160,7 @@ bool ControlServer::dispatchCommand(const char* line) {
 
   char buf[1024];
   serializeJson(out, buf, sizeof(buf));
-  g_transport.writeLine(buf);
+  t->writeLine(buf);
   return true;
 }
 
@@ -195,7 +213,7 @@ void ControlServer::onEvent(const Evt& e) {
       return;
   }
   if (serializeJson(doc, buf, sizeof(buf)) > 0) {
-    g_transport.writeLine(buf);
+    broadcast(buf);
   }
 }
 

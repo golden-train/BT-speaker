@@ -5,11 +5,13 @@
 #pragma once
 #include <ArduinoJson.h>
 #include "core/events.h"
+#include "control/transport.h"
 
 class ControlServer {
 public:
-  static void init();   // 传输 begin + 注册事件监听 + 发 ready 事件
-  static void poll();   // 每 loop 调用：读一行并分发
+  static void addTransport(Transport& t);   // 注册传输（USB 串口 / BLE），会 begin()
+  static void init();   // 注册事件监听 + 发 ready 事件（广播）
+  static void poll();   // 每 loop 调用：读所有传输并分发
 
 private:
   using CmdHandler = void (*)(const JsonObject& in, JsonObject& out);
@@ -17,8 +19,8 @@ private:
   static const CmdDef kCommandTable[];          // 定义在 .cpp（类作用域内可访问私有成员）
   static const CmdDef* findCommand(const char* name);
 
-  static void onEvent(const Evt& e);   // 事件总线监听：Evt → JSON 行
-  static bool dispatchCommand(const char* line);
+  static void onEvent(const Evt& e);   // 事件总线监听：Evt → JSON 行（广播）
+  static bool dispatchCommand(Transport* t, const char* line);   // 响应回发该传输
 
   // 命令处理
   static void hGetStatus(const JsonObject& in, JsonObject& out);
