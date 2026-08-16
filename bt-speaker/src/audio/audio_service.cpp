@@ -1,4 +1,5 @@
 #include "audio/audio_service.h"
+#include "audio/dsp.h"
 #include "core/settings.h"
 #include "config.h"
 
@@ -23,9 +24,16 @@ void AudioService::init() {
   a2dp_.set_avrc_metadata_callback(AudioService::onMeta);
   a2dp_.set_avrc_rn_playstatus_callback(AudioService::onPlayStatus);
   a2dp_.set_on_volumechange(AudioService::onVol);
+  a2dp_.set_on_data_received(AudioService::onDataReceived);   // 诊断：音频数据到达计数
 
   // ---- 3. 启动蓝牙 A2DP ----
   a2dp_.set_auto_reconnect(true, 100);   // 断连后自动重连
+
+  // ---- 3.5 P5 DSP：接管音频输出（就地处理，库负责 I²S 写入）----
+  a2dp_.set_stream_reader(AudioService::dspCallback, true);
+  dsp::init();
+  applyDspConfig();
+
   a2dp_.start(BT_DEVICE_NAME);
 
   // ---- 4. 应用记忆音量（0..100 → 0..127）----
@@ -72,6 +80,59 @@ void AudioService::toggle() { (playState_ == PlayState::Playing) ? pause() : pla
 void AudioService::next()   { a2dp_.next(); }
 void AudioService::prev()   { a2dp_.previous(); }
 
+// ---- P5 调试中心 ----
+void AudioService::applyDspConfig() {
+  dsp::Config c;
+  c.leftGain  = Settings::getChannelGainLeft() / 100.0f;
+  c.rightGain = Settings::getChannelGainRight() / 100.0f;
+  c.balance   = Settings::getBalance() / 100.0f;
+  for (int i = 0; i < 5; ++i) c.eqDb[i] = Settings::getCustomEq(i);
+  dsp::setConfig(c);
+}
+
+void AudioService::setEq(uint8_t idx) {
+  if (idx >= EQ_COUNT) return;
+  Settings::setEq(idx);
+  // 预设表写入 customEq（对应 60/250/1000/4000/12000 Hz 增益）
+  static const int8_t kPreset[EQ_COUNT][5] = {
+    { 0,  0,  0,  0,  0},   // flat
+    { 5,  2, -1,  2,  4},   // rock
+    {-1,  2,  3,  2, -1},   // pop
+    { 3,  2, -1,  1,  3},   // jazz
+  };
+  for (int i = 0; i < 5; ++i) Settings::setCustomEq((uint8_t)i, kPreset[idx][i]);
+  applyDspConfig();
+}
+
+void AudioService::setChannelGain(uint8_t channel, uint8_t pct) {
+  if (pct > 100) pct = 100;
+  if (channel == 0) Settings::setChannelGainLeft(pct);
+  else              Settings::setChannelGainRight(pct);
+  applyDspConfig();
+}
+
+void AudioService::setBalance(int8_t bal) {
+  Settings::setBalance(bal);
+  applyDspConfig();
+}
+
+void AudioService::setCustomEq(uint16_t freq, int8_t gainDb) {
+  int idx = -1;
+  for (int i = 0; i < 5; ++i) {
+    if (dsp::kEqFreqs[i] == freq) { idx = i; break; }
+  }
+  if (idx < 0) return;                 // 不在 60/250/1000/4000/12000 里，忽略
+  Settings::setCustomEq((uint8_t)idx, gainDb);
+  applyDspConfig();
+}
+
+void AudioService::dspCallback(const uint8_t* data, uint32_t len) {
+  // 音量已被库的 volume_control 应用；这里就地做增益/平衡/EQ，库随后写 I²S
+  uint16_t sr = audio.a2dp_.sample_rate();
+  dsp::setSampleRate(sr ? sr : 44100);
+  dsp::process((int16_t*)data, len / 4);
+}
+
 void AudioService::onBtConn(bool connected) {
   if (audio.btConnected_ == connected) return;
   audio.btConnected_ = connected;
@@ -110,6 +171,11 @@ void AudioService::onPlayStatus(esp_avrc_playback_stat_t s) {
   if (audio.playState_ == st) return;
   audio.playState_ = st;
   events.publish(Evt{EvtType::PlayStateChanged, (uint8_t)st, 0, nullptr, nullptr});
+}
+
+void AudioService::onDataReceived() {
+  // 每收到一帧 A2DP 音频 +1（BT task 上下文）。>0 说明音频数据确实在流向 I²S。
+  audio.audioFrames_++;
 }
 
 void AudioService::onVol(int vol127) {

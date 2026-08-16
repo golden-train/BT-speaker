@@ -17,7 +17,7 @@
 | C3 错误事件 `{"evt":"error","code":...}` | ✅ **已实施** | SD 挂载失败触发，管道就位 |
 | getStatus 增 `muted` | ✅ **已实施** | |
 | A1 进度/时长/seek | ⏸ 延后 | **v1.7.4 无 AVRCP 位置回调**；App 隐藏进度条。后续升级 A2DP 库到 v1.8.x（需 IDF 5）后可做 |
-| B1 自定义 EQ `setEqParam` | ⏸ P5 | 与 5 段软件 EQ 一起 |
+| B1 自定义 EQ `setEqParam` | ✅ **已实施(P5)** | 即调试中心 `setCustomEq`（5 段 biquad EQ + 预设） |
 | B2/B3 SD 选歌/播放模式 | ⏸ P6 | `listTracks`/`playFile`/`setPlayMode` |
 | B4 电量事件 | ⏸ P7 | 协议已定义 `{"evt":"battery"}`，P7 接 ADC 后启用 |
 | C2 关机 `powerOff` | ⏸ P7 | 电源管理/待机 |
@@ -47,9 +47,9 @@
 ## 4. 剩余路线
 
 ```
-P5 音频 DSP（set_stream_reader 接管输出；5段 biquad EQ + 4预设 + 动态低音
-   + 自定义EQ/setEqParam + L/R独立增益/平衡 —— 覆盖 sperker-APP/interface.md 调试中心命令
-   getConfig/setChannelGain/setBalance/setCustomEq）
+✅ P5 音频 DSP（已实现：set_stream_reader 就地 DSP；L/R 增益 + 平衡 + 5段 biquad EQ
+   + 4预设(flat/rock/pop/jazz) + 自定义EQ —— 覆盖调试中心命令
+   getConfig/setChannelGain/setBalance/setCustomEq，fw 0.5）
    ↓
 P6 SD播放（ESP8266Audio 解码 + 音源切换 + B2 listTracks/playFile + B3 setPlayMode）
    ↓
@@ -57,7 +57,7 @@ P7 电源管理（电量 ADC + 充电检测 + 低电报警 + B4 电量事件 + C
    ↓
 P8 装箱（外壳 + 整机）
 ```
-延后：中文渲染（TFT + SD 字体）、WiFi 文件访问（`voice-control-plan` 之外，App 远程管卡）、语音控制（INMP441 + WiFi 音频流）。
+延后：中文渲染（TFT + SD 字体，SD 上 hzk16/hzk12 已就绪）、WiFi 文件访问（`voice-control-plan` 之外，App 远程管卡）、语音控制（INMP441 + WiFi 音频流）。
 
 ## 5. 已完成的固件功能（当前 main）
 

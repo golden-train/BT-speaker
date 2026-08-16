@@ -33,6 +33,13 @@ constexpr const char* CMD_GET_DEVICE  = "getDeviceInfo";
 constexpr const char* CMD_SET_EQ   = "setEq";
 constexpr const char* CMD_SET_SRC  = "setSource";
 constexpr const char* CMD_GET_BATT = "getBattery";
+// P5 调试中心
+constexpr const char* CMD_GET_CONFIG       = "getConfig";
+constexpr const char* CMD_SET_CHANNEL_GAIN = "setChannelGain";
+constexpr const char* CMD_SET_BALANCE      = "setBalance";
+constexpr const char* CMD_SET_CUSTOM_EQ    = "setCustomEq";
+// 调试
+constexpr const char* CMD_GET_AUDIO_DEBUG = "getAudioDebug";  // 返回音频数据到达计数，定位"没音乐"
 
 // ---- 事件名（device → host 的 "evt" 值）----
 constexpr const char* EVT_READY   = "ready";

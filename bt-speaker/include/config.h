@@ -8,10 +8,13 @@
 #include <stdint.h>
 
 // ---------------- I²S 总线 (MAX98357A) ----------------
-// 双声道立体声：两片 MAX98357A 共用同一组 I²S 总线（BCLK/LRC/DIN），
-// 声道由各片 SD 引脚电阻选择（MAX98357A 数据手册 Table 5 SD_Mode Control）：
-//   左声道：SD → VIN 短接（SD 电压 >1.4V）
-//   右声道：SD → VIN 经 ~560kΩ（SD 电压 0.77~1.4V）
+// 双声道立体声：两片 MAX98357A 共用同一组 I²S 总线（BCLK/LRC/DIN）。
+// 每片有 2 个配置脚（I2S 模式）：
+//   SD_MODE（选声道/关断）：短接 VIN(>1.44V)=左声道；经 RSMALL(0.77~1.44V)=右声道；
+//                           经 RLARGE(0.16~0.77V)=(L+R)/2 混音；接 GND=关断。
+//   电阻按 SD 上拉所接电源轨算：RSMALL≈94×VDD−100 → VDD=5V≈370kΩ，VDD=3.3V≈210kΩ
+//   GAIN（输出增益）：悬空=9dB(默认)；GND=12dB；VDD=6dB；100k→VDD=3dB；100k→GND=15dB
+// 双声道接法：左片 SD→VIN（左声道）；右片 SD→RSMALL→VIN（右声道）。两片 GAIN 默认悬空。
 #define PIN_I2S_BCLK   26   // BCK（两片共用）
 #define PIN_I2S_LRC    25   // LRC/WS（两片共用）
 #define PIN_I2S_DIN    22   // DIN（两片共用，立体声交错数据）
@@ -51,7 +54,7 @@
 #define BT_DEVICE_NAME  "ESP32-BT-Speaker"
 
 // ---------------- 固件版本（ready 事件 / getDeviceInfo 共用） ----------------
-#define FW_VERSION  "0.4"
+#define FW_VERSION  "0.5"
 
 // ---------------- EQ 预设（P5 实现效果，P2 先定名称） ----------------
 enum { EQ_FLAT = 0, EQ_ROCK, EQ_POP, EQ_JAZZ, EQ_COUNT };

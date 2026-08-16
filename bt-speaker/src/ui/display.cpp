@@ -15,8 +15,8 @@ void Display::init() {
   tftSPI.begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, -1);   // 无 MISO（TFT 只写）
 
   tft_ = new Adafruit_ST7735(&tftSPI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RES);
-  tft_->initR(INITR_BLACKTAB);   // 1.8" ST7735；若颜色反/花屏改 INITR_GREENTAB
-  tft_->setRotation(0);          // 竖屏 128×160
+  tft_->initR(INITR_GREENTAB);   // 1.8" ST7735：多数便宜模块是 GREENTAB（花屏/乱码换 BLACKTAB/REDTAB）
+  tft_->setRotation(1);          // 128×160；方向不对改 0/1/2/3
 
   // 背光：模块 BLK 低=关，拉高开启
   pinMode(PIN_TFT_BLK, OUTPUT);

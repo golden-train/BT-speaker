@@ -83,9 +83,9 @@ void KnobControl::onPress() {
           mode_ = 2;
           display.setMenuMode(2);
           break;
-        case 1: {                  // EQ 循环（效果 P5，先存值）
+        case 1: {                  // EQ 循环（P5：预设生效）
           uint8_t e = (Settings::getEq() + 1) % EQ_COUNT;
-          Settings::setEq(e);
+          audio.setEq(e);
           display.refreshPrefs();
           break;
         }

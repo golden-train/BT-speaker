@@ -2,6 +2,7 @@
 #include "control/protocol.h"
 #include "control/transport.h"
 #include "audio/audio_service.h"
+#include "audio/dsp.h"
 #include "core/settings.h"
 #include "storage/sd_card.h"
 #include "storage/assets.h"
@@ -35,9 +36,14 @@ const ControlServer::CmdDef ControlServer::kCommandTable[] = {
     {proto::CMD_BT_DISCON,   &ControlServer::hBtDisconnect},
     {proto::CMD_BT_RECON,    &ControlServer::hBtReconnect},
     {proto::CMD_GET_DEVICE,  &ControlServer::hGetDeviceInfo},
-    {proto::CMD_SET_EQ,     &ControlServer::hNotImplemented},
+    {proto::CMD_SET_EQ,     &ControlServer::hSetEq},
     {proto::CMD_SET_SRC,    &ControlServer::hNotImplemented},
     {proto::CMD_GET_BATT,   &ControlServer::hNotImplemented},
+    {proto::CMD_GET_AUDIO_DEBUG, &ControlServer::hGetAudioDebug},
+    {proto::CMD_GET_CONFIG,       &ControlServer::hGetConfig},
+    {proto::CMD_SET_CHANNEL_GAIN, &ControlServer::hSetChannelGain},
+    {proto::CMD_SET_BALANCE,      &ControlServer::hSetBalance},
+    {proto::CMD_SET_CUSTOM_EQ,    &ControlServer::hSetCustomEq},
 };
 
 // ------------------------------------------------------------------
@@ -260,6 +266,85 @@ void ControlServer::hGetDeviceInfo(const JsonObject& in, JsonObject& out) {
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   d["serial"] = serial;
 }
+void ControlServer::hGetAudioDebug(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  out["ok"] = true;
+  JsonObject d = out.createNestedObject("debug");
+  d["bt"] = audio.isBtConnected();
+  d["playstate"] = proto::playStateName(audio.getPlayState());
+  d["frames"] = audio.getAudioFrames();   // 音频数据到达计数（>0 = 数据在流）
+}
+
+// ---- P5 调试中心 ----
+void ControlServer::hSetEq(const JsonObject& in, JsonObject& out) {
+  const char* preset = in["preset"] | "";
+  int idx = -1;
+  for (int i = 0; i < EQ_COUNT; ++i) {
+    if (strcmp(preset, eqPresetName(i)) == 0) { idx = i; break; }
+  }
+  if (idx < 0) {
+    out["ok"] = false;
+    out["error"] = "invalid_value";
+    return;
+  }
+  audio.setEq((uint8_t)idx);
+  out["ok"] = true;
+  out["preset"] = preset;
+}
+
+void ControlServer::hGetConfig(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  out["ok"] = true;
+  JsonObject cfg = out.createNestedObject("config");
+  JsonObject cg = cfg.createNestedObject("channelGain");
+  cg["left"] = Settings::getChannelGainLeft();
+  cg["right"] = Settings::getChannelGainRight();
+  cfg["balance"] = Settings::getBalance();
+  JsonArray ce = cfg.createNestedArray("customEq");
+  for (int i = 0; i < 5; ++i) {
+    JsonObject b = ce.createNestedObject();
+    b["freq"] = dsp::kEqFreqs[i];
+    b["gain"] = Settings::getCustomEq((uint8_t)i);
+  }
+}
+
+void ControlServer::hSetChannelGain(const JsonObject& in, JsonObject& out) {
+  const char* ch = in["channel"] | "";
+  int gain = in["gain"] | -1;
+  int chan = (strcmp(ch, "left") == 0) ? 0 : (strcmp(ch, "right") == 0) ? 1 : -1;
+  if (chan < 0 || gain < 0 || gain > 100) {
+    out["ok"] = false;
+    out["error"] = "invalid_value";
+    return;
+  }
+  audio.setChannelGain((uint8_t)chan, (uint8_t)gain);
+  out["ok"] = true;
+}
+
+void ControlServer::hSetBalance(const JsonObject& in, JsonObject& out) {
+  int bal = in["balance"] | 999;
+  if (bal < -100 || bal > 100) {
+    out["ok"] = false;
+    out["error"] = "invalid_value";
+    return;
+  }
+  audio.setBalance((int8_t)bal);
+  out["ok"] = true;
+}
+
+void ControlServer::hSetCustomEq(const JsonObject& in, JsonObject& out) {
+  int freq = in["freq"] | 0;
+  int gain = in["gain"] | 99;
+  bool valid = (freq == 60 || freq == 250 || freq == 1000 || freq == 4000 || freq == 12000);
+  if (!valid || gain < -12 || gain > 12) {
+    out["ok"] = false;
+    out["error"] = "invalid_value";
+    return;
+  }
+  audio.setCustomEq((uint16_t)freq, (int8_t)gain);
+  out["ok"] = true;
+}
+
 void ControlServer::hNotImplemented(const JsonObject& in, JsonObject& out) {
   (void)in;
   out["ok"] = false;

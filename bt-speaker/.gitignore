@@ -3,7 +3,8 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-
+docs/
+test/
 # Python 缓存
 __pycache__/
 *.pyc

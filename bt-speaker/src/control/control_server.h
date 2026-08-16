@@ -38,6 +38,13 @@ private:
   static void hBtDisconnect(const JsonObject& in, JsonObject& out);
   static void hBtReconnect(const JsonObject& in, JsonObject& out);
   static void hGetDeviceInfo(const JsonObject& in, JsonObject& out);
+  static void hGetAudioDebug(const JsonObject& in, JsonObject& out);  // 诊断：音频数据到达计数
+  // P5 调试中心
+  static void hSetEq(const JsonObject& in, JsonObject& out);
+  static void hGetConfig(const JsonObject& in, JsonObject& out);
+  static void hSetChannelGain(const JsonObject& in, JsonObject& out);
+  static void hSetBalance(const JsonObject& in, JsonObject& out);
+  static void hSetCustomEq(const JsonObject& in, JsonObject& out);
   // 预留命令统一占位
   static void hNotImplemented(const JsonObject& in, JsonObject& out);
 };
