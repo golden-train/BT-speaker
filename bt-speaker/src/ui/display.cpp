@@ -41,7 +41,7 @@ void Display::init() {
   tft_ = new Adafruit_ST7735(&tftSPI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RES);
   tft_->initR(INITR_GREENTAB);   // 1.8" ST7735：多数便宜模块是 GREENTAB（花屏/乱码换 BLACKTAB/REDTAB）
   tft_->setRotation(1);          // 本屏正确方向为横屏 160×128（与 UI/帧缓冲一致）
-  tft_->setSPISpeed(24000000);   // 整屏推帧提速（不稳回落 8MHz）
+  tft_->setSPISpeed(8000000);    // 8MHz：降 EMI 噪（24MHz 提速但更吵）
 
   // 背光：模块 BLK 低=关，拉高开启
   pinMode(PIN_TFT_BLK, OUTPUT);

@@ -14,6 +14,33 @@ bool openFont() {
   return (bool)s_hzk;
 }
 
+// CJK 字形 LRU 缓存：标题滚动时逐帧画同一批汉字，避免每帧都走 SD SPI（降噪/提速）
+constexpr int kGlyphCache = 8;
+struct GlyphCache { uint16_t uni; uint8_t data[32]; uint32_t last; };
+GlyphCache s_cache[kGlyphCache] = {};
+uint32_t s_cacheTick = 0;
+
+bool cacheGet(uint16_t uni, uint8_t out[32]) {
+  for (int i = 0; i < kGlyphCache; ++i) {
+    if (s_cache[i].last != 0 && s_cache[i].uni == uni) {
+      s_cache[i].last = s_cacheTick;
+      memcpy(out, s_cache[i].data, 32);
+      return true;
+    }
+  }
+  return false;
+}
+
+void cachePut(uint16_t uni, const uint8_t d[32]) {
+  s_cacheTick++;
+  int old = 0;
+  for (int i = 1; i < kGlyphCache; ++i)
+    if (s_cache[i].last < s_cache[old].last) old = i;
+  s_cache[old].uni = uni;
+  s_cache[old].last = s_cacheTick;
+  memcpy(s_cache[old].data, d, 32);
+}
+
 // UTF-8 解码下一个码点并推进指针；无效字节跳过返回 0xFFFD
 uint32_t utf8Next(const char*& s) {
   uint8_t c = (uint8_t)*s;
@@ -43,12 +70,15 @@ bool CjkTextRenderer::glyphAt(uint32_t uni, uint8_t out[32]) const {
   while (lo <= hi) {
     int mid = (lo + hi) / 2;
     if (kGbTable[mid].uni == (uint16_t)uni) {
+      if (cacheGet((uint16_t)uni, out)) return true;   // 命中缓存，免 SD 读
       uint8_t qu = (uint8_t)(kGbTable[mid].quwei >> 8);
       uint8_t wei = (uint8_t)(kGbTable[mid].quwei & 0xFF);
       if (!openFont()) return false;
       uint32_t off = (uint32_t)(qu * 94 + wei) * 32;
       if (!s_hzk.seek(off)) return false;
-      return s_hzk.read(out, 32) == 32;
+      bool ok = s_hzk.read(out, 32) == 32;
+      if (ok) cachePut((uint16_t)uni, out);
+      return ok;
     }
     if (kGbTable[mid].uni < (uint16_t)uni) lo = mid + 1;
     else hi = mid - 1;
