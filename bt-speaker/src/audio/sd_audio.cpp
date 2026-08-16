@@ -17,6 +17,7 @@ namespace {
 
 constexpr int kMaxTracks = 32;
 constexpr int kNameLen = 64;
+constexpr const char* kMusicDir = "/music";   // 歌曲统一放这个子目录
 
 PlayMode g_mode = kRepeatAll;
 int g_index = -1;
@@ -92,7 +93,7 @@ void freePlayer() {
 void scan() {
   g_trackCount = 0;
   if (!sd_card::isMounted()) return;
-  File dir = SD.open("/", "r");
+  File dir = SD.open(kMusicDir, "r");
   if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return; }
   for (;;) {
     File f = dir.openNextFile();
@@ -118,7 +119,9 @@ bool playFile(const char* name) {
   freePlayer();
   AudioGenerator* gen = makeGenerator(name);
   if (!gen) return false;
-  AudioFileSource* src = new AudioFileSourceSD(name);
+  char full[kNameLen + 16];
+  snprintf(full, sizeof(full), "%s/%s", kMusicDir, name);
+  AudioFileSource* src = new AudioFileSourceSD(full);
   if (!src->isOpen()) {
     delete src;
     delete gen;
