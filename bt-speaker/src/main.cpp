@@ -20,6 +20,7 @@
 #include "input/buttons.h"
 #include "control/control_server.h"
 #include "control/transports/serial_transport.h"
+#include "control/spp_transport.h"
 #ifdef SPEAKER_ENABLE_BLE
 #include "control/ble_transport.h"
 #endif
@@ -36,6 +37,7 @@ void setup() {
   controlServer.addTransport(bleTransport);     //    BLE 传输（可选，编译开关 SPEAKER_ENABLE_BLE）
 #endif
   audio.init();            // 4. 蓝牙 A2DP + I²S（BLE 开启时须在其后）
+  controlServer.addTransport(sppTransport);  //    SPP 无线串口（叠加在已启用的蓝牙栈上）
   controlServer.init();    //    控制接口（发 ready 广播，不被下面阻塞）
   if (!sd_card::begin()) { // 5. TF 卡挂载（非致命；失败推 error 事件）
     events.publish(Evt{EvtType::Error, 0, 0, "sd_mount_failed", nullptr});
