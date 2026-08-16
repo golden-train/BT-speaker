@@ -41,6 +41,9 @@ bool SppTransport::readLine(char* out, size_t cap) {
       if (n >= cap) n = cap - 1;
       memcpy(out, s_line, n);
       out[n] = '\0';
+#ifdef SPEAKER_DEBUG
+      Serial.printf("[spp] rx %u bytes\n", (unsigned)n);
+#endif
       return true;
     }
     if (s_len < kBufSize - 1) s_line[s_len++] = (char)c;
@@ -49,7 +52,15 @@ bool SppTransport::readLine(char* out, size_t cap) {
 }
 
 void SppTransport::writeLine(const char* line) {
-  if (!s_spp.connected()) return;
+  if (!s_spp.connected()) {
+#ifdef SPEAKER_DEBUG
+    Serial.printf("[spp] tx DROP (not connected) len=%u\n", (unsigned)strlen(line));
+#endif
+    return;
+  }
+#ifdef SPEAKER_DEBUG
+  Serial.printf("[spp] tx %u bytes\n", (unsigned)strlen(line));
+#endif
   s_spp.print(line);
   s_spp.print('\n');
   s_spp.flush();
