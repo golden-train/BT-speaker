@@ -33,6 +33,10 @@ constexpr const char* CMD_GET_DEVICE  = "getDeviceInfo";
 constexpr const char* CMD_SET_EQ   = "setEq";
 constexpr const char* CMD_SET_SRC  = "setSource";
 constexpr const char* CMD_GET_BATT = "getBattery";
+// P6 SD 播放
+constexpr const char* CMD_LIST_TRACKS   = "listTracks";
+constexpr const char* CMD_PLAY_FILE     = "playFile";
+constexpr const char* CMD_SET_PLAY_MODE = "setPlayMode";
 // P5 调试中心
 constexpr const char* CMD_GET_CONFIG       = "getConfig";
 constexpr const char* CMD_SET_CHANNEL_GAIN = "setChannelGain";

@@ -1,5 +1,6 @@
 #include "audio/audio_service.h"
 #include "audio/dsp.h"
+#include "audio/sd_audio.h"
 #include "core/settings.h"
 #include "config.h"
 
@@ -74,11 +75,46 @@ void AudioService::btReconnect() {
   a2dp_.set_connected(true);
 }
 
-void AudioService::play()   { a2dp_.play(); }
-void AudioService::pause()  { a2dp_.pause(); }
-void AudioService::toggle() { (playState_ == PlayState::Playing) ? pause() : play(); }
-void AudioService::next()   { a2dp_.next(); }
-void AudioService::prev()   { a2dp_.previous(); }
+void AudioService::play() {
+  if (source_ == Source::Sd) {
+    if (sd_audio::isPaused()) { sd_audio::pauseToggle(); }
+    else if (sd_audio::currentIndex() < 0) { sd_audio::playIndex(0); }
+    return;
+  }
+  a2dp_.play();
+}
+void AudioService::pause() {
+  if (source_ == Source::Sd) {
+    if (sd_audio::isPlaying()) sd_audio::pauseToggle();
+    return;
+  }
+  a2dp_.pause();
+}
+void AudioService::toggle() {
+  if (source_ == Source::Sd) { sd_audio::pauseToggle(); return; }
+  (playState_ == PlayState::Playing) ? pause() : play();
+}
+void AudioService::next() {
+  if (source_ == Source::Sd) { sd_audio::next(); return; }
+  a2dp_.next();
+}
+void AudioService::prev() {
+  if (source_ == Source::Sd) { sd_audio::prev(); return; }
+  a2dp_.previous();
+}
+
+void AudioService::setSource(Source s) {
+  if (source_ == s) return;
+  source_ = s;
+  Settings::setSource((uint8_t)s);
+  if (s == Source::Sd) {
+    // 切 SD：A2DP 改为"读回调但不写 I²S"，SD 播放器接管输出
+    a2dp_.set_stream_reader(AudioService::dspCallback, false);
+  } else {
+    a2dp_.set_stream_reader(AudioService::dspCallback, true);
+    sd_audio::stop();
+  }
+}
 
 // ---- P5 调试中心 ----
 void AudioService::applyDspConfig() {
@@ -127,6 +163,8 @@ void AudioService::setCustomEq(uint16_t freq, int8_t gainDb) {
 }
 
 void AudioService::dspCallback(const uint8_t* data, uint32_t len) {
+  // SD 模式：A2DP 数据旁路（is_i2s_output=false，库不再写 I²S，SD 播放器接管）
+  if (audio.source_ != Source::Bluetooth) return;
   // 音量已被库的 volume_control 应用；这里就地做增益/平衡/EQ，库随后写 I²S
   uint16_t sr = audio.a2dp_.sample_rate();
   dsp::setSampleRate(sr ? sr : 44100);

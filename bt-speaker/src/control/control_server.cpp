@@ -3,6 +3,7 @@
 #include "control/transport.h"
 #include "audio/audio_service.h"
 #include "audio/dsp.h"
+#include "audio/sd_audio.h"
 #include "core/settings.h"
 #include "storage/sd_card.h"
 #include "storage/assets.h"
@@ -37,8 +38,11 @@ const ControlServer::CmdDef ControlServer::kCommandTable[] = {
     {proto::CMD_BT_RECON,    &ControlServer::hBtReconnect},
     {proto::CMD_GET_DEVICE,  &ControlServer::hGetDeviceInfo},
     {proto::CMD_SET_EQ,     &ControlServer::hSetEq},
-    {proto::CMD_SET_SRC,    &ControlServer::hNotImplemented},
+    {proto::CMD_SET_SRC,    &ControlServer::hSetSource},
     {proto::CMD_GET_BATT,   &ControlServer::hNotImplemented},
+    {proto::CMD_LIST_TRACKS,   &ControlServer::hListTracks},
+    {proto::CMD_PLAY_FILE,     &ControlServer::hPlayFile},
+    {proto::CMD_SET_PLAY_MODE, &ControlServer::hSetPlayMode},
     {proto::CMD_GET_AUDIO_DEBUG, &ControlServer::hGetAudioDebug},
     {proto::CMD_GET_CONFIG,       &ControlServer::hGetConfig},
     {proto::CMD_SET_CHANNEL_GAIN, &ControlServer::hSetChannelGain},
@@ -67,7 +71,7 @@ void fillStatus(JsonObject& status) {
   status["playstate"] = playStateName(audio.getPlayState());
   status["bt"] = audio.isBtConnected();
   status["eq"] = eqPresetName(Settings::getEq());
-  status["source"] = Settings::getSource() == 0 ? "bluetooth" : "sd";
+  status["source"] = audio.getSource() == Source::Bluetooth ? "bluetooth" : "sd";
   status["battery"] = -1;  // P7 预留：电量未知
   status["sd"] = sd_card::isMounted();   // 纯标志，不做 FS I/O
   if (audio.getTitle()[0])  status["title"]  = audio.getTitle();
@@ -343,6 +347,58 @@ void ControlServer::hSetCustomEq(const JsonObject& in, JsonObject& out) {
   }
   audio.setCustomEq((uint16_t)freq, (int8_t)gain);
   out["ok"] = true;
+}
+
+// ---- P6 SD 播放 ----
+void ControlServer::hSetSource(const JsonObject& in, JsonObject& out) {
+  const char* src = in["source"] | "";
+  Source s;
+  if (strcmp(src, "bluetooth") == 0) s = Source::Bluetooth;
+  else if (strcmp(src, "sd") == 0)  s = Source::Sd;
+  else { out["ok"] = false; out["error"] = "invalid_value"; return; }
+  audio.setSource(s);
+  out["ok"] = true;
+  out["source"] = src;
+}
+
+void ControlServer::hListTracks(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  if (!sd_card::isMounted()) {
+    out["ok"] = false;
+    out["error"] = "sd_not_mounted";
+    return;
+  }
+  sd_audio::scan();                    // 每次列目录，保证新拷的歌可见
+  out["ok"] = true;
+  JsonArray arr = out.createNestedArray("tracks");
+  for (int i = 0; i < sd_audio::trackCount(); ++i) {
+    arr.add(sd_audio::trackName(i));
+  }
+}
+
+void ControlServer::hPlayFile(const JsonObject& in, JsonObject& out) {
+  const char* file = in["file"] | "";
+  if (!file[0]) { out["ok"] = false; out["error"] = "invalid_value"; return; }
+  if (!sd_audio::playFile(file)) {
+    out["ok"] = false;
+    out["error"] = "open_failed";
+    return;
+  }
+  audio.setSource(Source::Sd);         // 播放即切到 SD 音源
+  out["ok"] = true;
+  out["file"] = file;
+}
+
+void ControlServer::hSetPlayMode(const JsonObject& in, JsonObject& out) {
+  const char* m = in["mode"] | "";
+  sd_audio::PlayMode pm;
+  if (strcmp(m, "single") == 0)       pm = sd_audio::kSingle;
+  else if (strcmp(m, "all") == 0)     pm = sd_audio::kRepeatAll;
+  else if (strcmp(m, "random") == 0)  pm = sd_audio::kRandom;
+  else { out["ok"] = false; out["error"] = "invalid_value"; return; }
+  sd_audio::setPlayMode(pm);
+  out["ok"] = true;
+  out["mode"] = m;
 }
 
 void ControlServer::hNotImplemented(const JsonObject& in, JsonObject& out) {

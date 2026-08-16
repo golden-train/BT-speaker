@@ -9,6 +9,8 @@
 #include "core/events.h"
 #include "BluetoothA2DPSink.h"
 
+enum class Source : uint8_t { Bluetooth = 0, Sd = 1 };
+
 class AudioService {
 public:
   void init();                    // I2S 引脚 + A2DP + AVRCP 回调 + 应用记忆音量
@@ -24,6 +26,8 @@ public:
   void prev();
   void btDisconnect();            // 主动断开蓝牙
   void btReconnect();             // 重连上次设备
+  void setSource(Source s);       // 音源切换（bluetooth ↔ sd），P6
+  Source getSource() const { return source_; }
   // ---- P5 调试中心 ----
   void setEq(uint8_t idx);                            // 预设 → 写入 customEq 并生效
   void setChannelGain(uint8_t channel, uint8_t pct);  // channel: 0=left, 1=right
@@ -41,6 +45,7 @@ private:
   bool muted_ = false;
   PlayState playState_ = PlayState::Stopped;
   bool btConnected_ = false;
+  Source source_ = Source::Bluetooth;
   char title_[64] = {0};
   char artist_[64] = {0};
 

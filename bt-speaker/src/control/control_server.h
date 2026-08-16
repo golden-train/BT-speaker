@@ -45,6 +45,11 @@ private:
   static void hSetChannelGain(const JsonObject& in, JsonObject& out);
   static void hSetBalance(const JsonObject& in, JsonObject& out);
   static void hSetCustomEq(const JsonObject& in, JsonObject& out);
+  // P6 SD 播放
+  static void hSetSource(const JsonObject& in, JsonObject& out);
+  static void hListTracks(const JsonObject& in, JsonObject& out);
+  static void hPlayFile(const JsonObject& in, JsonObject& out);
+  static void hSetPlayMode(const JsonObject& in, JsonObject& out);
   // 预留命令统一占位
   static void hNotImplemented(const JsonObject& in, JsonObject& out);
 };
