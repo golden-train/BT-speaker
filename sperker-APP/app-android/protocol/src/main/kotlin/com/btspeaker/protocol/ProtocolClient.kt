@@ -11,11 +11,13 @@ import kotlinx.serialization.json.*
 import java.util.concurrent.TimeoutException
 
 class ProtocolClient(private val transport: Transport) {
+    private val json = Json { ignoreUnknownKeys = true }
     private val codec = JsonLineCodec()
     private val eventCbs = mutableListOf<(Incoming.Event) -> Unit>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val lock = Any()
     private val queue = ArrayDeque<Pair<String, CompletableDeferred<Incoming.Response>>>()
-    private var current: Pair<String, CompletableDeferred<Incoming.Response>>? = null
+    @Volatile private var current: Pair<String, CompletableDeferred<Incoming.Response>>? = null
 
     init { transport.onLine { handleLine(it) } }
 
@@ -26,21 +28,29 @@ class ProtocolClient(private val transport: Transport) {
     suspend fun send(req: Map<String, Any?>, timeoutMs: Long = 2000): Incoming.Response {
         val line = buildRequest(req)
         val deferred = CompletableDeferred<Incoming.Response>()
-        queue.addLast(line to deferred)
-        pump()
+        synchronized(lock) {
+            queue.addLast(line to deferred)
+            pumpLocked()
+        }
         val result = withTimeoutOrNull(timeoutMs) { deferred.await() }
         if (result != null) return result
-        val removed = queue.removeAll { it.second === deferred }
-        if (!removed && current?.second === deferred) {
-            current = null
-            pump()
+        val wasCurrent = synchronized(lock) {
+            val removed = queue.removeAll { it.second === deferred }
+            if (!removed && current?.second === deferred) {
+                current = null
+                true
+            } else false
         }
+        if (wasCurrent) pump()
         throw TimeoutException("timeout after ${timeoutMs}ms: $line")
     }
 
     fun onEvent(cb: (Incoming.Event) -> Unit) { eventCbs.add(cb) }
 
-    private fun pump() {
+    private fun pump() = synchronized(lock) { pumpLocked() }
+
+    /** 需在 lock 内调用 */
+    private fun pumpLocked() {
         if (current != null || queue.isEmpty()) return
         val next = queue.removeFirst()
         current = next
@@ -48,9 +58,14 @@ class ProtocolClient(private val transport: Transport) {
             try {
                 transport.write(next.first)
             } catch (e: Exception) {
-                if (current?.second === next.second) {
-                    current = null
-                    next.second.completeExceptionally(e)
+                val toComplete = synchronized(lock) {
+                    if (current?.second === next.second) {
+                        current = null
+                        next.second
+                    } else null
+                }
+                if (toComplete != null) {
+                    toComplete.completeExceptionally(e)
                     pump()
                 }
             }
@@ -58,20 +73,22 @@ class ProtocolClient(private val transport: Transport) {
     }
 
     private fun handleLine(line: String) {
-        for (el in codec.push(line)) {
-            val obj = el as? JsonObject ?: continue
-            if (obj.containsKey("evt")) {
-                val evt = Incoming.Event(
-                    evt = obj["evt"]!!.jsonPrimitive.content,
-                    fields = obj.filterKeys { it != "evt" }
-                )
-                eventCbs.toList().forEach { it(evt) }
-            } else {
-                val cur = current ?: continue
+        // 传输层已按 '\n' 拆好整行，这里直接解析（codec.push 只适合喂原始 chunk）
+        val obj = runCatching { json.parseToJsonElement(line) }.getOrNull() as? JsonObject ?: return
+        if (obj.containsKey("evt")) {
+            val evt = Incoming.Event(
+                evt = obj["evt"]!!.jsonPrimitive.content,
+                fields = obj.filterKeys { it != "evt" }
+            )
+            eventCbs.toList().forEach { it(evt) }
+        } else {
+            val cur = synchronized(lock) {
+                val c = current
                 current = null
-                cur.second.complete(parseResponse(obj))
-                pump()
-            }
+                c
+            } ?: return
+            cur.second.complete(parseResponse(obj))
+            pump()
         }
     }
 
@@ -82,6 +99,10 @@ class ProtocolClient(private val transport: Transport) {
         status = Parser.status(obj["status"] as? JsonObject),
         storage = Parser.storage(obj["storage"] as? JsonObject),
         config = Parser.config(obj["config"] as? JsonObject),
+        device = Parser.device(obj["device"] as? JsonObject),
+        battery = if (obj["cmd"]?.jsonPrimitive?.contentOrNull == "getBattery") Parser.battery(obj) else null,
+        debug = Parser.audioDebug(obj["debug"] as? JsonObject),
+        tracks = Parser.tracks(obj["tracks"] as? JsonArray),
         error = obj["error"]?.jsonPrimitive?.contentOrNull,
     )
 

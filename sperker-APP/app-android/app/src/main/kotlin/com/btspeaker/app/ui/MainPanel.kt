@@ -1,7 +1,13 @@
 package com.btspeaker.app.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +29,8 @@ import com.btspeaker.protocol.ConnState
 import com.btspeaker.protocol.SpeakerUiState
 
 private val kEqBands = listOf(60 to "60 Hz", 250 to "250 Hz", 1000 to "1 kHz", 4000 to "4 kHz", 12000 to "12 kHz")
+private val kEqPresets = listOf("flat", "rock", "pop", "jazz")
+private val kPlayModes = listOf("single" to "单曲循环", "all" to "列表循环", "random" to "随机")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +38,35 @@ fun MainPanel(vm: SpeakerViewModel) {
     val ui by vm.ui.collectAsState()
     val dark by vm.dark.collectAsState()
     val context = LocalContext.current
+    val blePermissions = remember {
+        if (Build.VERSION.SDK_INT >= 31) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+    val bleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) {
+            vm.connectBle()
+        } else {
+            Toast.makeText(context, "需要蓝牙权限才能使用 BLE 控制", Toast.LENGTH_SHORT).show()
+        }
+    }
+    // SPP（经典蓝牙串口）：Android 12+ 需 BLUETOOTH_CONNECT 运行时权限
+    val sppPermissions = remember {
+        if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT) else emptyArray()
+    }
+    val sppLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) {
+            vm.connectSpp()
+        } else {
+            Toast.makeText(context, "需要蓝牙权限才能使用 SPP 控制", Toast.LENGTH_SHORT).show()
+        }
+    }
     val connected = ui.conn == ConnState.Connected
     val notConnected: () -> Unit = {
         Toast.makeText(context, "未连接，请先连接音箱", Toast.LENGTH_SHORT).show()
@@ -62,15 +99,38 @@ fun MainPanel(vm: SpeakerViewModel) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ConnectionSection(
-                    ui,
+                    ui, connected, notConnected,
                     onConnect = { vm.connect() },
+                    onSppConnect = {
+                        val missing = sppPermissions.filter {
+                            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                        }
+                        if (missing.isEmpty()) vm.connectSpp() else sppLauncher.launch(missing.toTypedArray())
+                    },
+                    onBleConnect = {
+                        val missing = blePermissions.filter {
+                            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                        }
+                        if (missing.isEmpty()) vm.connectBle() else bleLauncher.launch(missing.toTypedArray())
+                    },
                     onSimulate = { vm.simulate() },
                     onDisconnect = { vm.disconnect() },
+                    onToggleMute = { vm.toggleMute() },
+                    onBtDisconnect = { vm.btDisconnect() },
+                    onBtReconnect = { vm.btReconnect() },
                 )
-                InfoSection(ui)
+                InfoSection(ui, connected, notConnected, onPowerOff = { vm.powerOff() })
                 OutputSection(ui, connected, notConnected, vm)
                 CustomEqSection(ui, connected, notConnected, vm)
+                SdSection(ui, connected, notConnected, vm)
                 StorageSection(ui)
+                if (ui.lastError != null) {
+                    Text(
+                        "最近错误：${ui.lastError}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
@@ -92,7 +152,19 @@ private fun SectionCard(title: String, note: String? = null, content: @Composabl
 }
 
 @Composable
-private fun ConnectionSection(ui: SpeakerUiState, onConnect: () -> Unit, onSimulate: () -> Unit, onDisconnect: () -> Unit) {
+private fun ConnectionSection(
+    ui: SpeakerUiState,
+    connected: Boolean,
+    onNotConnected: () -> Unit,
+    onConnect: () -> Unit,
+    onSppConnect: () -> Unit,
+    onBleConnect: () -> Unit,
+    onSimulate: () -> Unit,
+    onDisconnect: () -> Unit,
+    onToggleMute: () -> Unit,
+    onBtDisconnect: () -> Unit,
+    onBtReconnect: () -> Unit,
+) {
     SectionCard("连接") {
         val color = when (ui.conn) {
             ConnState.Connected -> Color(0xFF4CAF50)
@@ -114,22 +186,57 @@ private fun ConnectionSection(ui: SpeakerUiState, onConnect: () -> Unit, onSimul
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onConnect, enabled = ui.conn != ConnState.Connecting) { Text("连接") }
+            OutlinedButton(onClick = onSppConnect, enabled = ui.conn != ConnState.Connecting) { Text("SPP 连接") }
+            OutlinedButton(onClick = onBleConnect, enabled = ui.conn != ConnState.Connecting) { Text("BLE 连接") }
             OutlinedButton(onClick = onSimulate, enabled = ui.conn != ConnState.Connecting) { Text("模拟连接") }
             if (ui.conn == ConnState.Connected) {
                 OutlinedButton(onClick = onDisconnect) { Text("断开") }
             }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val muted = ui.status?.muted == true
+            OutlinedButton(onClick = {
+                if (connected) onToggleMute() else onNotConnected()
+            }) { Text(if (muted) "取消静音" else "静音") }
+            OutlinedButton(onClick = {
+                if (connected) onBtDisconnect() else onNotConnected()
+            }) { Text("断开蓝牙") }
+            OutlinedButton(onClick = {
+                if (connected) onBtReconnect() else onNotConnected()
+            }) { Text("重连蓝牙") }
+        }
     }
 }
 
 @Composable
-private fun InfoSection(ui: SpeakerUiState) {
-    val s = ui.status
+private fun InfoSection(ui: SpeakerUiState, connected: Boolean, onNotConnected: () -> Unit, onPowerOff: () -> Unit) {
+    val d = ui.device
+    val b = ui.battery
     SectionCard("设备信息") {
-        InfoRow("固件版本", ui.fw.ifEmpty { "--" })
-        InfoRow("蓝牙", if (s?.bt == true) "已连接" else "未连接")
-        InfoRow("输入源", s?.source?.let { if (it == "sd") "TF 卡" else "蓝牙" } ?: "--")
-        InfoRow("电量", s?.battery?.takeIf { it >= 0 }?.let { "$it%" } ?: "未实现")
+        InfoRow("固件版本", d?.fw ?: ui.fw.ifEmpty { "--" })
+        InfoRow("芯片", d?.chip?.ifEmpty { "--" } ?: "--")
+        InfoRow("运行时间", d?.uptimeS?.let { formatUptime(it) } ?: "--")
+        InfoRow("电池电压", b?.voltageMv?.takeIf { it > 0 }?.let { "%.2f V".format(it / 1000.0) } ?: "--")
+        InfoRow(
+            "电量",
+            when {
+                b != null && b.battery >= 0 -> if (b.charging) "${b.battery}%（充电中）" else "${b.battery}%"
+                ui.status?.battery?.let { it >= 0 } == true -> "${ui.status?.battery}%"
+                else -> "未接电池/未实现"
+            },
+        )
+        InfoRow("蓝牙", if (ui.status?.bt == true) "已连接" else "未连接")
+        InfoRow("输入源", ui.status?.source?.let { if (it == "sd") "TF 卡" else "蓝牙" } ?: "--")
+        InfoRow("重启原因", d?.rst?.let { rstReason(it) } ?: "--")
+        InfoRow("序列号", d?.serial?.ifEmpty { "--" } ?: "--")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    if (connected) onPowerOff() else onNotConnected()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) { Text("关机") }
+        }
     }
 }
 
@@ -166,10 +273,81 @@ private fun OutputSection(ui: SpeakerUiState, connected: Boolean, onNotConnected
 @Composable
 private fun CustomEqSection(ui: SpeakerUiState, connected: Boolean, onNotConnected: () -> Unit, vm: SpeakerViewModel) {
     val cfg = ui.config
-    SectionCard("自定义音调", note = if (!ui.caps.customEq) "固件未实现" else null) {
+    val currentPreset = ui.status?.eq ?: "flat"
+    SectionCard(
+        "自定义音调",
+        note = if (!ui.caps.customEq) "固件未实现" else null,
+    ) {
+        Text("EQ 预设", style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            kEqPresets.forEach { preset ->
+                val selected = currentPreset == preset
+                if (selected) {
+                    Button(onClick = { if (connected) vm.setEq(preset) else onNotConnected() }) { Text(preset.uppercase()) }
+                } else {
+                    OutlinedButton(onClick = { if (connected) vm.setEq(preset) else onNotConnected() }) { Text(preset.uppercase()) }
+                }
+            }
+        }
+        HorizontalDivider()
         kEqBands.forEach { (freq, label) ->
             val gain = cfg?.customEq?.firstOrNull { it.freq == freq }?.gain ?: 0
             DebugSlider(label, gain, -12f..12f, connected, { vm.setCustomEq(freq, it) }, onNotConnected, format = { "$it dB" })
+        }
+    }
+}
+
+@Composable
+private fun SdSection(ui: SpeakerUiState, connected: Boolean, onNotConnected: () -> Unit, vm: SpeakerViewModel) {
+    val source = ui.status?.source ?: "bluetooth"
+    SectionCard("SD 播放 / 调试") {
+        Text("输入源", style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val isBt = source == "bluetooth"
+            if (isBt) {
+                Button(onClick = { if (connected) vm.setSource("bluetooth") else onNotConnected() }) { Text("蓝牙") }
+            } else {
+                OutlinedButton(onClick = { if (connected) vm.setSource("bluetooth") else onNotConnected() }) { Text("蓝牙") }
+            }
+            if (!isBt) {
+                Button(onClick = { if (connected) vm.setSource("sd") else onNotConnected() }) { Text("TF 卡") }
+            } else {
+                OutlinedButton(onClick = { if (connected) vm.setSource("sd") else onNotConnected() }) { Text("TF 卡") }
+            }
+        }
+        Text("播放模式", style = MaterialTheme.typography.bodyMedium)
+        var mode by remember { mutableStateOf("all") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            kPlayModes.forEach { (m, label) ->
+                val selected = mode == m
+                if (selected) {
+                    Button(onClick = { if (connected) { mode = m; vm.setPlayMode(m) } else onNotConnected() }) { Text(label) }
+                } else {
+                    OutlinedButton(onClick = { if (connected) { mode = m; vm.setPlayMode(m) } else onNotConnected() }) { Text(label) }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                if (connected) vm.listTracks() else onNotConnected()
+            }) { Text("列曲目") }
+            Text("${ui.tracks?.size ?: 0} 首", style = MaterialTheme.typography.bodySmall)
+        }
+        ui.tracks?.forEach { file ->
+            TextButton(onClick = {
+                if (connected) vm.playFile(file) else onNotConnected()
+            }) { Text(file, style = MaterialTheme.typography.bodyMedium) }
+        }
+        HorizontalDivider()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                if (connected) vm.refreshDebug() else onNotConnected()
+            }) { Text("音频诊断") }
+            val dbg = ui.debug
+            Text(
+                if (dbg == null) "未诊断" else "BT=${if (dbg.bt) "通" else "断"} ${dbg.playstate} frames=${dbg.frames}",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -225,3 +403,24 @@ private fun DebugSlider(
 
 private fun formatBytes(kb: Long?): String =
     if (kb == null) "--" else if (kb >= 1024) "%.1f MB".format(kb / 1024.0) else "$kb KB"
+
+private fun formatUptime(s: Long): String {
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return when {
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m ${sec}s"
+        else -> "${sec}s"
+    }
+}
+
+private fun rstReason(rst: Int): String = when (rst) {
+    1 -> "上电"
+    3 -> "软重启"
+    4 -> "panic"
+    5, 6, 7 -> "看门狗"
+    8 -> "深度睡眠唤醒"
+    9 -> "掉电"
+    else -> "未知($rst)"
+}
