@@ -42,7 +42,9 @@
 
 // ---------------- 电池 —— P7 启用 ----------------
 #define PIN_BAT_ADC    36   // ADC1_CH0，经分压电路测电压
-#define PIN_CHARGE_DET 15   // TP4056 CHRG 充电检测
+#define PIN_CHARGE_DET 15   // TP4056 CHRG 充电检测（低有效=充电中）
+#define BAT_DIVIDER    2.0f // 分压比 Vbat/Vadc（按实际电阻校准，R1=R2=100k 时为 2）
+#define BAT_LOW_PCT    10   // 低电量阈值（%），低于且未充电 → 自动休眠
 
 // ---------------- microSD (SPI) —— P6 启用 ----------------
 #define PIN_SD_CS      17

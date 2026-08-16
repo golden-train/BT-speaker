@@ -39,6 +39,9 @@ private:
   static void hBtReconnect(const JsonObject& in, JsonObject& out);
   static void hGetDeviceInfo(const JsonObject& in, JsonObject& out);
   static void hGetAudioDebug(const JsonObject& in, JsonObject& out);  // 诊断：音频数据到达计数
+  // P7 电源
+  static void hGetBattery(const JsonObject& in, JsonObject& out);
+  static void hPowerOff(const JsonObject& in, JsonObject& out);
   // P5 调试中心
   static void hSetEq(const JsonObject& in, JsonObject& out);
   static void hGetConfig(const JsonObject& in, JsonObject& out);

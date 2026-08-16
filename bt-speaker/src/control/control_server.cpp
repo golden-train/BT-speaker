@@ -4,6 +4,7 @@
 #include "audio/audio_service.h"
 #include "audio/dsp.h"
 #include "audio/sd_audio.h"
+#include "power/battery.h"
 #include "core/settings.h"
 #include "storage/sd_card.h"
 #include "storage/assets.h"
@@ -11,11 +12,13 @@
 #include <Arduino.h>
 #include <string.h>
 #include <esp_efuse.h>   // getDeviceInfo 的 MAC/serial
+#include <esp_sleep.h>   // powerOff 深度睡眠
 
 ControlServer controlServer;
 
 namespace {
 volatile bool s_rebootRequested = false;
+volatile bool s_powerOffRequested = false;
 }  // namespace
 
 // 命令表（含预留命令，统一回 not_implemented）。
@@ -39,7 +42,8 @@ const ControlServer::CmdDef ControlServer::kCommandTable[] = {
     {proto::CMD_GET_DEVICE,  &ControlServer::hGetDeviceInfo},
     {proto::CMD_SET_EQ,     &ControlServer::hSetEq},
     {proto::CMD_SET_SRC,    &ControlServer::hSetSource},
-    {proto::CMD_GET_BATT,   &ControlServer::hNotImplemented},
+    {proto::CMD_GET_BATT,   &ControlServer::hGetBattery},
+    {proto::CMD_POWER_OFF,  &ControlServer::hPowerOff},
     {proto::CMD_LIST_TRACKS,   &ControlServer::hListTracks},
     {proto::CMD_PLAY_FILE,     &ControlServer::hPlayFile},
     {proto::CMD_SET_PLAY_MODE, &ControlServer::hSetPlayMode},
@@ -72,7 +76,7 @@ void fillStatus(JsonObject& status) {
   status["bt"] = audio.isBtConnected();
   status["eq"] = eqPresetName(Settings::getEq());
   status["source"] = audio.getSource() == Source::Bluetooth ? "bluetooth" : "sd";
-  status["battery"] = -1;  // P7 预留：电量未知
+  status["battery"] = battery::percentage();   // P7：-1 = 未接电池/异常
   status["sd"] = sd_card::isMounted();   // 纯标志，不做 FS I/O
   if (audio.getTitle()[0])  status["title"]  = audio.getTitle();
   if (audio.getArtist()[0]) status["artist"] = audio.getArtist();
@@ -104,6 +108,12 @@ void ControlServer::poll() {
     g_transport.flush();
     delay(100);
     ESP.restart();
+  }
+  if (s_powerOffRequested) {
+    g_transport.flush();
+    delay(100);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_32, LOW);   // 编码器按键唤醒
+    esp_deep_sleep_start();
   }
 }
 
@@ -174,8 +184,14 @@ void ControlServer::onEvent(const Evt& e) {
       doc["evt"] = proto::EVT_ERROR;
       doc["code"] = e.s1 ? e.s1 : "unknown";
       break;
+    case EvtType::Battery:
+      doc["evt"] = proto::EVT_BATTERY;
+      doc["battery"] = e.a;
+      doc["charging"] = e.b != 0;
+      doc["voltageMv"] = battery::voltageMv();
+      break;
     default:
-      return;  // Battery 等预留事件 P7 启用
+      return;
   }
   if (serializeJson(doc, buf, sizeof(buf)) > 0) {
     g_transport.writeLine(buf);
@@ -262,7 +278,7 @@ void ControlServer::hGetDeviceInfo(const JsonObject& in, JsonObject& out) {
   d["fw"] = FW_VERSION;
   d["chip"] = "ESP32";
   d["uptimeS"] = (uint32_t)(millis() / 1000);
-  d["voltage"] = -1;                    // P7 后接 ADC
+  d["voltage"] = battery::voltageMv();  // P7：0 = 未接电池/异常
   uint8_t mac[6];
   esp_efuse_mac_get_default(mac);
   char serial[16];
@@ -399,6 +415,21 @@ void ControlServer::hSetPlayMode(const JsonObject& in, JsonObject& out) {
   sd_audio::setPlayMode(pm);
   out["ok"] = true;
   out["mode"] = m;
+}
+
+// ---- P7 电源 ----
+void ControlServer::hGetBattery(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  out["ok"] = true;
+  out["battery"] = battery::percentage();   // -1 = 未接电池
+  out["charging"] = battery::isCharging();
+  out["voltageMv"] = battery::voltageMv();  // 0 = 未接电池
+}
+
+void ControlServer::hPowerOff(const JsonObject& in, JsonObject& out) {
+  (void)in;
+  out["ok"] = true;
+  s_powerOffRequested = true;   // 响应写完后再深度睡眠
 }
 
 void ControlServer::hNotImplemented(const JsonObject& in, JsonObject& out) {

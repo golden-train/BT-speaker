@@ -33,6 +33,7 @@ constexpr const char* CMD_GET_DEVICE  = "getDeviceInfo";
 constexpr const char* CMD_SET_EQ   = "setEq";
 constexpr const char* CMD_SET_SRC  = "setSource";
 constexpr const char* CMD_GET_BATT = "getBattery";
+constexpr const char* CMD_POWER_OFF = "powerOff";   // P7 深度睡眠（编码器键唤醒）
 // P6 SD 播放
 constexpr const char* CMD_LIST_TRACKS   = "listTracks";
 constexpr const char* CMD_PLAY_FILE     = "playFile";
