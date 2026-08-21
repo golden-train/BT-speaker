@@ -55,7 +55,7 @@
 #define PIN_SD_SCK     14
 
 // ---------------- 蓝牙 ----------------
-#define BT_DEVICE_NAME  "ESP32-BT-Speaker"
+#define BT_DEVICE_NAME  "32D"
 
 // ---------------- 固件版本（ready 事件 / getDeviceInfo 共用） ----------------
 #define FW_VERSION  "0.6"
