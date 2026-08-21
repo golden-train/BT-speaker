@@ -114,6 +114,6 @@ class SppTransport(private val context: Context) : Transport {
     }
 
     companion object {
-        const val DEVICE_NAME = "32D"
+        const val DEVICE_NAME = "ESP32-BT-Speaker"
     }
 }
